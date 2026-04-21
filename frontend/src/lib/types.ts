@@ -345,3 +345,34 @@ export const backtestRunResponseSchema = z.object({
   bets: z.array(backtestBetRowSchema),
 });
 export type BacktestRunResponse = z.infer<typeof backtestRunResponseSchema>;
+
+export const dataColumnSchema = z.object({
+  name: z.string(),
+  dtype: z.string(),
+});
+export type DataColumn = z.infer<typeof dataColumnSchema>;
+
+export const dataPartitionSchema = z.object({
+  values: z.record(z.string()),
+  rows: z.number().int().nonnegative(),
+});
+export type DataPartition = z.infer<typeof dataPartitionSchema>;
+
+export const dataTableOverviewSchema = z.object({
+  name: z.string(),
+  root: z.string(),
+  partition_keys: z.array(z.string()),
+  exists: z.boolean(),
+  total_rows: z.number().int().nonnegative(),
+  columns: z.array(dataColumnSchema),
+  partitions: z.array(dataPartitionSchema),
+  samples: z.array(z.record(z.string().nullable())),
+});
+export type DataTableOverview = z.infer<typeof dataTableOverviewSchema>;
+
+export const dataOverviewResponse = z.object({
+  generated_at: z.string(),
+  lake_root: z.string(),
+  tables: z.array(dataTableOverviewSchema),
+});
+export type DataOverviewResponse = z.infer<typeof dataOverviewResponse>;

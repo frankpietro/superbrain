@@ -29,6 +29,7 @@
 - [Architecture](#architecture)
 - [Alerts](#alerts-phase-8-2026-04-21)
 - [Backtest API wiring (phase 10)](#backtest-api-wiring-phase-10-2026-04-21)
+- [Data tab & lake overview (phase 11)](#data-tab--lake-overview-phase-11-2026-04-21)
 - [Conventions](#conventions)
 - [Algorithm correctness contract](#algorithm-correctness-contract)
 - [Scraper reliability contract](#scraper-reliability-contract)
@@ -708,6 +709,66 @@ Not touched in this phase (tracked elsewhere):
 - Backtest endpoint — landed in PR #24, synchronous JSON response.
   SSE streaming of longer multi-season backtests is deferred; the
   engine is still millisecond-fast on single-season slices.
+
+### Data tab & lake overview (phase 11, 2026-04-21)
+
+Adds a `/data` route that inventories the Parquet lake — rows per
+league / season / bookmaker, column schemas, and five sample rows per
+table. Closes the long-standing black-box UX: before this, the only way
+to know *what's actually in the lake* was to run polars in a REPL.
+
+Backend (`src/superbrain/api/routers/data.py`):
+
+- `GET /data/overview` walks every hive-partitioned root under the
+  lake in a fixed order (`matches`, `team_match_stats`, `odds`,
+  `team_elo`, `scrape_runs`, `simulation_runs`). For each table it
+  pulls row counts from parquet footers (`pl.scan_parquet(f).select(pl.len())`)
+  — no full reads — then materialises `.head(5)` of the smallest file
+  to derive the column list and sample rows.
+- Partitions are surfaced as a list of `{values: dict, rows: int}`
+  sorted by row count desc, capped at 500 entries so degenerate
+  directory sprawl can't balloon the response.
+- Samples are **stringified on the way out** (`str | null`) so the
+  SPA doesn't need a per-column type adapter — numeric / datetime /
+  struct columns all collapse to strings the renderer can display.
+- `match_index.parquet` (top-level under `matches/`) is filtered out
+  of the partition count — it lives outside the hive layout and
+  would otherwise inflate the `matches` total.
+- Tests (`tests/api/test_data.py`) cover the empty-lake case and a
+  seeded-lake shape assertion (row counts, partition key order,
+  sample-row types).
+
+SPA (`frontend/src/routes/data.tsx` + `/data` route +
+`Database` icon in the nav):
+
+- Summary card tiles one-per-table with total rows, partition count,
+  and column count; a grand-total tile below.
+- Per-table tab pane renders up to four breakdown bar charts
+  (league / year / season / bookmaker — whichever partition keys the
+  table actually has), a scrollable partition table, a schema badge
+  grid (`name: dtype`), and a sample-rows table with every cell
+  truncated-with-tooltip so wide rows don't blow out the layout.
+- Year aggregation is derived from the `season` partition value
+  (`"2023-24"` → `"2023"`), cheapest sensible "rows per year" signal
+  without scanning `match_date`.
+
+**Historical backfill run the same day.** Lake was nearly empty
+(114 matches, 0 stats) because the phase-5 scheduler only scrapes
+live odds — nothing had ever called `scripts/backfill_historical.py`.
+One invocation against the top-5 leagues × 2020-21 → 2025-26 ×
+`football_data,understat` wrote 13,131 matches + 26,342
+team-match-stats rows in ~2 minutes, zero rejections. The Matches
+page now shows past fixtures out of the box; `/data` is how we'll
+notice the next time a table goes empty.
+
+Deferred (not blocking):
+
+- Telemetry for ClubElo / FBref coverage — the overview already shows
+  `team_elo` empty; it stays that way until someone runs the
+  backfill with `--sources …,clubelo,fbref`.
+- Per-row preview of the actual **parquet schema** (polars strings
+  are good enough for a dashboard; a richer view would surface
+  nullability and Arrow types).
 
 ### Dev environment
 

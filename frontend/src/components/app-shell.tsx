@@ -5,6 +5,7 @@ import {
   Brain,
   CircleUserRound,
   Clock,
+  Database,
   GanttChart,
   LayoutDashboard,
   ListOrdered,
@@ -36,6 +37,7 @@ const NAV: NavLink[] = [
   },
   { to: "/backtest", label: "Backtest", icon: GanttChart },
   { to: "/trends", label: "Trends", icon: TrendingUp },
+  { to: "/data", label: "Data", icon: Database },
 ];
 
 function isActive(to: string, pathname: string): boolean {
