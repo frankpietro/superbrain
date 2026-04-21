@@ -1,4 +1,5 @@
 import { z, type ZodType } from "zod";
+import { sanitizeBearerToken } from "@/lib/auth-token";
 import { getAuthToken, useAuth } from "@/stores/auth";
 import {
   healthResponse,
@@ -75,7 +76,22 @@ export async function apiFetch<T>(
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
   const token = getAuthToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    // Belt-and-braces: the auth store already sanitizes, but a stale
+    // localStorage entry from a pre-fix build could still carry an unsafe
+    // character. Reject here before fetch() crashes with the cryptic
+    // "String contains non ISO-8859-1 code point" error.
+    const check = sanitizeBearerToken(token);
+    if (!check.ok) {
+      useAuth.getState().clear();
+      throw new ApiError(
+        `Stored token is unusable (${check.reason}). Re-enter it on the login page.`,
+        401,
+        { detail: "invalid stored token" },
+      );
+    }
+    headers.Authorization = `Bearer ${check.token}`;
+  }
   if (authRequired && !token) {
     throw new ApiError("Not authenticated", 401, { detail: "missing token" });
   }

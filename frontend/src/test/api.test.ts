@@ -67,4 +67,20 @@ describe("apiFetch", () => {
       status: 401,
     });
   });
+
+  it("rejects a stale non-ASCII token from localStorage without calling fetch", async () => {
+    // Simulate a pre-sanitization build that persisted a dirty token to
+    // localStorage. setState() bypasses the setToken guard exactly the way a
+    // rehydrate from disk would before onRehydrateStorage landed.
+    useAuth.setState({ token: "dev\u2013token" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("/matches", schema)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useAuth.getState().token).toBeNull();
+  });
 });

@@ -27,4 +27,21 @@ describe("auth store", () => {
     useAuth.getState().clear();
     expect(useAuth.getState().token).toBeNull();
   });
+
+  it("rejects a token containing non-ISO-8859-1 characters", () => {
+    useAuth.getState().setToken("dev\u2013token"); // en-dash
+    expect(useAuth.getState().token).toBeNull();
+  });
+
+  it("strips surrounding whitespace before persisting", () => {
+    useAuth.getState().setToken("  sb_trimmed\n");
+    expect(useAuth.getState().token).toBe("sb_trimmed");
+  });
+
+  it("refuses an empty or whitespace-only token", () => {
+    useAuth.getState().setToken("");
+    expect(useAuth.getState().token).toBeNull();
+    useAuth.getState().setToken("   ");
+    expect(useAuth.getState().token).toBeNull();
+  });
 });
