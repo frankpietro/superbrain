@@ -39,8 +39,28 @@ jobs:
       - name: Pytest
         run: uv run pytest --cov=superbrain --cov-report=term-missing
 
-  # A `gaia doctor` CI job will return once a PAT with read access to the
-  # (private) https://github.com/frankpietro/gaia repo is available as a
-  # repository secret. Until then, `gaia doctor` runs locally via the
-  # pre-push hook (`.githooks/pre-push`) and the Cursor session-start hook
-  # (`.cursor/hooks/auto-branch.sh`), which is enough coverage.
+  gaia:
+    name: gaia doctor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout superbrain
+        uses: actions/checkout@v4
+
+      - name: Checkout gaia (private)
+        uses: actions/checkout@v4
+        with:
+          repository: frankpietro/gaia
+          token: ${{ secrets.GAIA_READ_PAT }}
+          path: .gaia-src
+          ref: main
+
+      - name: Install gaia CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          ln -sf "$GITHUB_WORKSPACE/.gaia-src/gaia" "$HOME/.local/bin/gaia"
+          chmod +x "$GITHUB_WORKSPACE/.gaia-src/gaia"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Gaia doctor
+        run: gaia doctor "$GITHUB_WORKSPACE"
