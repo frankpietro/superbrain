@@ -353,6 +353,43 @@ Operator runbook:
 3. **Dry-run.** `uv run python -m superbrain.alerts --run-once` reads the lake, prices the next 48 hours, runs the policy, dispatches to whichever channels are configured, persists to the sink, and prints a JSON summary. Safe to rerun — the sink idempotency blocks re-sends inside the dedup window.
 4. **Tuning.** If the bot is noisy, raise `SUPERBRAIN_ALERT_EDGE_THRESHOLD` or `SUPERBRAIN_ALERT_MIN_PROBABILITY` before lowering `SUPERBRAIN_ALERT_MAX_PER_RUN` — the latter silently drops information, the former two shift the bar.
 
+### Ablation and engine tests (phase 4b, 2026-04-21)
+
+Phase 4b closes two of the three phase-4a follow-ups and introduces the feature-ablation harness that the SPA will consume in phase 4c. Lives under `src/superbrain/ablation/` and new test files under `tests/engine/` and `tests/ablation/`.
+
+**Engine test coverage (shipped).** Three new test modules:
+
+- `tests/engine/test_bets.py` — parametrized over every registered `BetStrategy`. Asserts that `iter_outcomes` materialises every `(selection, params_hash)` seeded into the snapshot list, that `compute_probability` stays in `[0, 1]` and is strictly positive on at least one outcome per market against a deterministic `(home=[3]*6, away=[2]*6)` neighbour sample, that repeated input dedupes, and that empty neighbour samples return `0.0` without raising. Tiebreaker: `validate_result` returning `None` when both realised values are missing — per-team markets (`corner_team`, `goals_team`) decide on one side alone, so the "one missing" case is not universally `None` and is covered instead in `test_backtest`.
+- `tests/engine/test_pipeline.py` — integration against a purpose-built 20-match lake (six teams, round-robin prefix). Asserts `build_engine_context` returns a populated similarity matrix, `price_fixture` yields finite probabilities in `[0, 1]` with correct `model_payout = 1 / p`, and `find_value_bets` returns bets sorted by descending edge with non-negative expected value per row. Deterministic: same fixture ⇒ same priced outcomes bit-for-bit.
+- `tests/engine/test_backtest.py` — 10-match synthetic lake, forced short-priced OVER 0.5 bets via a module-level `OddsProvider`. Asserts `n_wins + n_losses + n_unresolved == n_bets`, `roi == total_profit / total_stake`, `hit_rate == n_wins / (n_wins + n_losses)`, and — constructively — that wrapping the lake in `_NoLeakageLake(cutoff=fixture.match_date)` makes `read_matches` / `read_odds` return zero rows for the held-out match-of-interest.
+
+**OddsProvider is now a `typing.Protocol`** (`src/superbrain/engine/backtest.py`). Was a concrete class with a raising `__call__`; that made every callable-based test fail mypy. The new `@runtime_checkable` Protocol keeps the contract identical at runtime and lets tests pass plain functions.
+
+**FeatureAblationStudy (shipped).** `src/superbrain/ablation/`:
+
+- `FeatureAblationStudy` is a dataclass wrapping `run_backtest` in a greedy forward-selection loop over clustering features. Seeds with the best size-2 subset pairing the anchor feature (first in tie-breaker order) against every other feature, then greedily extends while ROI strictly improves. Tie-breaking across candidates is stable (alphabetical on the added feature); tie-breaking across trajectory maxima prefers fewer features, then lexicographic subset.
+- **Deterministic by construction.** Given identical lake + fixtures + universe + tie-breaker + base pricing config, two runs produce bitwise-identical trajectories and best subset. The `seed` attribute is currently unused (greedy search is deterministic without it) but is threaded through for future stochastic variants.
+- **Fail-soft on degenerate clustering.** A subset whose feature vectors collapse to zero makes sklearn's cosine `AgglomerativeClustering` raise `"Cosine affinity cannot be used when X contains zero vectors"`. The study catches this at the trial boundary, logs `ablation: backtest failed for subset=...`, and scores the trial ROI=0 so the search continues and the trajectory remains complete.
+- **Persistence contract.** Trajectories are written to `data/ablation_runs/<bet_code>/<run_id>.parquet` with schema `(run_id, bet_code, feature_subset: list[str], n_matches, roi, hit_rate, avg_edge, started_at, finished_at)`. Reads via DuckDB in `read_ablation_runs(root=..., bet_code=...)` so the FastAPI read-side can stream them to the SPA without changing the lake layout.
+- **No CLI, no HTTP endpoint.** The ablation entry points are Python class + parquet only. SPA wiring lives in phase 4c; this is the foundation.
+
+Tests (5 in `tests/ablation/test_feature_ablation.py`) cover:
+
+1. `test_greedy_forward_selection_is_deterministic` — two fresh lakes built with the same seed produce identical trajectories and best subsets.
+2. `test_best_subset_is_the_trajectory_maximum` — the chosen best is the ROI-argmax in the trajectory (no outcome beats it).
+3. `test_parquet_persistence_roundtrips` — every row of the dumped parquet matches the in-memory outcome, the schema equals `ABLATION_FRAME_SCHEMA`, and `finished_at >= started_at`.
+4. `test_read_ablation_runs_filters_by_bet` — DuckDB glob read filters by bet_code and returns an empty frame for missing bets.
+5. `test_empty_feature_universe_raises` — a <2-column universe raises `ValueError`.
+
+### Golden regression corpus TODO (phase 4b, 2026-04-21)
+
+Deferred to a dedicated `feat(engine): golden regression corpus` PR. The blocker is shape translation, not algorithmic equivalence:
+
+- `fbref24/refactored_src/engine/pipeline.py` takes pandas DataFrames keyed by `(league, season, date, team, opponent)` and returns dicts of (dict of pandas). Our new lake materialises polars frames keyed by `(league, season, match_id, is_home)`.
+- The adapter needed is a reader that (a) pulls our lake's Serie A 2023-24 first-20-matchday slice, (b) projects the row schema into the old pandas shape (flatten `team`/`opponent`/`is_home` into the old `(HomeTeam, AwayTeam, HomeGoals, AwayGoals, HomeStat, AwayStat, …)` wide format), and (c) feeds that into the old pipeline.
+- Output capture needs mirror code: legacy returns pandas DataFrames, we store polars + a SHA256 of the flattened bytes; either we convert on the fly at snapshot time, or we freeze both representations.
+- Scope: 1 file of translation code (~150 lines), 1 script (`scripts/generate_engine_golden.py`), 1 test (`tests/engine/test_regression.py`) asserting `abs(new - old) <= 1e-6` on probabilities and exact equality on cluster partitions. Estimate: a single focused PR once the translator is written.
+
 ### Dev environment
 
 Trade-offs made on the owner's personal dev machine. See `AGENTS.md` → "Operating principle".
@@ -635,10 +672,14 @@ Items that will be decided as phases land:
 - **SPA ↔ backend type sync** — 2026-04-21: `frontend/src/lib/types.ts` is hand-written to mirror `superbrain.core.models`. Swap to `openapi-typescript http://localhost:8000/openapi.json -o src/lib/api-types.ts` as soon as the Phase-6 FastAPI `/openapi.json` stabilises.
 - **SPA bundle splitting** — 2026-04-21: Plotly drags `dist/assets/index-*.js` to ~2 MB unminified (~645 KB gzipped). Acceptable for a 3-user internal tool. If we ever route public traffic at it, lazy-load `src/components/plot.tsx` via `React.lazy` and drop Plotly from the initial chunk.
 - **SPA value-bet and backtest screens** — 2026-04-21: ship phase 7 with empty-state UX against the Phase-6 stubs (`GET /bets/value` → `{items: []}`, `POST /backtest/run` → 501). Real wiring lands alongside the engine in phase 4b; the forms + sortable table are already in place.
-- **Phase 4a follow-ups** (2026-04-21, tracked for phase 4b):
-  1. **Golden regression corpus.** `scripts/generate_engine_golden.py` that runs `fbref24/refactored_src/engine/pipeline.py` against a frozen Serie A 2023-24 slice (first 20 matchdays), captures the `(cluster_assignment, similarity_matrix_checksum, per-fixture priced outcomes, per-fixture value bets)` tuple into `tests/engine/fixtures/golden/`, and `tests/engine/test_regression.py` that fails on any deviation beyond `abs(new - old) <= 1e-6` on probabilities and exact equality on cluster partition. Blocked on: the old repo uses pandas + its own lake layout, needs an adapter from the new Polars lake to the old pandas shape. Ship as a dedicated `feat(engine): golden regression corpus` PR.
-  2. **End-to-end backtest + integration + no-leakage tests.** `src/superbrain/engine/backtest.py` is implemented (`run_backtest` + `_NoLeakageLake` proxy) and merged under phase 4a but has no test coverage yet; phase 4b ships `tests/engine/test_pipeline.py` (integration against a 20-match synthetic lake) and `tests/engine/test_backtest.py` (asserts `hits + misses == n_bets`, ROI math correct, `_NoLeakageLake` raises on reads of match-of-interest rows).
-  3. **Per-strategy bet unit tests.** Each registered `BetStrategy` needs its own `test_bets.py::test_<market>` asserting `iter_outcomes` covers every selection it emits and `compute_probability` returns a non-zero probability on a hand-constructed neighbor sample.
+- ~~**Phase 4a follow-ups** (2026-04-21, tracked for phase 4b):~~
+  1. ~~**Golden regression corpus.**~~ **Deferred 2026-04-21 to a dedicated PR.** See *Golden regression corpus TODO (phase 4b, 2026-04-21)* for the adapter; blocked on the pandas↔Polars shape mismatch documented there.
+  2. ~~**End-to-end backtest + integration + no-leakage tests.**~~ **Shipped 2026-04-21** as `tests/engine/test_pipeline.py` + `tests/engine/test_backtest.py` (see *Ablation and engine tests (phase 4b, 2026-04-21)*).
+  3. ~~**Per-strategy bet unit tests.**~~ **Shipped 2026-04-21** as `tests/engine/test_bets.py` covering all 13 registered strategies.
+- **Phase 4c follow-ups** (2026-04-21, newly opened by phase 4b):
+  1. Golden regression corpus (see the TODO section cited above).
+  2. API + SPA surface for ablation runs. Backend: `GET /ablation/runs?bet=...` streams `data/ablation_runs/<bet>/*.parquet` via DuckDB; `POST /ablation/studies` kicks off a backgrounded `FeatureAblationStudy.run(...)`. Frontend: drop the result table next to the backtest screen; no write path today because the Python class is the only entry point.
+  3. Beam / genetic search extensions to `FeatureAblationStudy`. Hooks are documented in the class docstring; swap `_search` and use the `seed` attribute for your RNG.
 
 ---
 
