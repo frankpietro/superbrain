@@ -1,17 +1,22 @@
-"""Stubbed bets + backtest endpoints."""
+"""``/bets/*`` endpoint smoke tests.
+
+Integration coverage of ``GET /bets/value`` against a seeded lake lives in
+``test_bets_value.py``; here we only cover the cheap read-side shape over an
+empty lake, plus the markets registry.
+"""
 
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
 
-def test_value_stub_shape(client: TestClient) -> None:
+def test_value_empty_lake_returns_empty_items(client: TestClient) -> None:
     resp = client.get("/bets/value")
     assert resp.status_code == 200
     body = resp.json()
     assert body["items"] == []
     assert body["count"] == 0
-    assert body["note"] == "engine not yet wired"
+    assert "computed_at" in body
 
 
 def test_markets_lists_every_registered_market(client: TestClient) -> None:

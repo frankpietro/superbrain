@@ -219,16 +219,23 @@ export const valueBetSchema = z.object({
   league: leagueEnum,
   market: z.string(),
   selection: z.string(),
+  market_params: z.record(z.unknown()).optional(),
   bookmaker: bookmakerEnum,
   decimal_odds: z.number().positive(),
   book_prob: z.number().min(0).max(1),
   model_prob: z.number().min(0).max(1),
   edge: z.number(),
+  sample_size: z.number().int().nonnegative().optional(),
+  captured_at: z.string().optional(),
+  kickoff_at: z.string().nullable().optional(),
 });
 export type ValueBet = z.infer<typeof valueBetSchema>;
 
 export const valueBetsResponse = z.object({
   items: z.array(valueBetSchema),
+  count: z.number().int().nonnegative().optional(),
+  computed_at: z.string().optional(),
+  note: z.string().nullable().optional(),
 });
 export type ValueBetsResponse = z.infer<typeof valueBetsResponse>;
 

@@ -230,15 +230,35 @@ class MarketInfo(BaseModel):
     target_stat: str | None
 
 
-class ValueBetStub(BaseModel):
-    """Placeholder shape for the (not-yet-wired) value-bet endpoint."""
+class ValueBetItem(BaseModel):
+    """One priced value bet exposed by ``GET /bets/value``.
+
+    Shape matches the SPA's ``valueBetSchema`` in ``frontend/src/lib/types.ts``.
+    """
 
     match_id: str
+    match_label: str
+    league: str
     market: str
     selection: str
-    edge: float
+    market_params: dict[str, Any] = Field(default_factory=dict)
     bookmaker: str
-    payout: float
+    decimal_odds: float
+    book_prob: float
+    model_prob: float
+    edge: float
+    sample_size: int
+    captured_at: datetime
+    kickoff_at: datetime | None = None
+
+
+class ValueBetsResponse(BaseModel):
+    """Envelope for ``GET /bets/value``."""
+
+    items: list[ValueBetItem] = Field(default_factory=list)
+    count: int = 0
+    computed_at: datetime
+    note: str | None = None
 
 
 class TrendsVariabilityRow(BaseModel):
