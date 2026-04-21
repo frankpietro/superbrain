@@ -37,6 +37,9 @@ playwright = [
 legacy-import = [
     "sqlalchemy>=2.0.0",
 ]
+historical = [
+    "soccerdata>=1.9.0",
+]
 
 [dependency-groups]
 dev = [
@@ -116,6 +119,22 @@ exclude = [
 ]
 
 # Third-party overrides land here as real imports appear in phases 1+.
+
+[[tool.mypy.overrides]]
+module = ["soccerdata", "pandas"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "backfill_historical"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.scrapers.historical.test_backfill"
+disable_error_code = ["import-not-found"]
+
+[[tool.mypy.overrides]]
+module = "tests.scrapers.historical.test_live"
+disable_error_code = ["import-not-found"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

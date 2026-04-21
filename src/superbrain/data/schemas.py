@@ -98,6 +98,19 @@ TEAM_MATCH_STATS_SCHEMA: pl.Schema = _schema(
 )
 
 
+TEAM_ELO_SCHEMA: pl.Schema = _schema(
+    [
+        ("team", pl.String),
+        ("country", pl.String),
+        ("snapshot_date", pl.Date),
+        ("elo", pl.Float64),
+        ("rank", pl.Int64),
+        ("source", pl.String),
+        ("ingested_at", pl.Datetime(time_unit="us", time_zone="UTC")),
+    ]
+)
+
+
 SCRAPE_RUNS_SCHEMA: pl.Schema = _schema(
     [
         ("run_id", pl.String),

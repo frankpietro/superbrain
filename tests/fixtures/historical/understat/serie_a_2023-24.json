@@ -1,0 +1,56 @@
+{
+  "teams": {},
+  "players": [],
+  "dates": [
+    {
+      "id": "22861",
+      "isResult": true,
+      "h": {"id": "93", "title": "Frosinone", "short_title": "FRO"},
+      "a": {"id": "87", "title": "Napoli", "short_title": "NAP"},
+      "goals": {"h": "1", "a": "3"},
+      "xG": {"h": "1.4", "a": "2.8"},
+      "datetime": "2023-08-19 16:30:00",
+      "forecast": {"w": "0.21", "d": "0.24", "l": "0.55"}
+    },
+    {
+      "id": "22862",
+      "isResult": true,
+      "h": {"id": "79", "title": "Genoa", "short_title": "GEN"},
+      "a": {"id": "78", "title": "Fiorentina", "short_title": "FIO"},
+      "goals": {"h": "1", "a": "4"},
+      "xG": {"h": "1.1", "a": "2.9"},
+      "datetime": "2023-08-19 18:45:00",
+      "forecast": {"w": "0.28", "d": "0.27", "l": "0.45"}
+    },
+    {
+      "id": "22863",
+      "isResult": true,
+      "h": {"id": "75", "title": "Inter", "short_title": "INT"},
+      "a": {"id": "91", "title": "Monza", "short_title": "MON"},
+      "goals": {"h": "2", "a": "0"},
+      "xG": {"h": "2.4", "a": "0.3"},
+      "datetime": "2023-08-20 16:30:00",
+      "forecast": {"w": "0.76", "d": "0.16", "l": "0.08"}
+    },
+    {
+      "id": "22864",
+      "isResult": true,
+      "h": {"id": "74", "title": "Roma", "short_title": "ROM"},
+      "a": {"id": "83", "title": "Salernitana", "short_title": "SAL"},
+      "goals": {"h": "2", "a": "2"},
+      "xG": {"h": "3.0", "a": "0.8"},
+      "datetime": "2023-08-20 18:45:00",
+      "forecast": {"w": "0.75", "d": "0.16", "l": "0.09"}
+    },
+    {
+      "id": "22865",
+      "isResult": true,
+      "h": {"id": "80", "title": "Hellas Verona", "short_title": "VER"},
+      "a": {"id": "89", "title": "Empoli", "short_title": "EMP"},
+      "goals": {"h": "1", "a": "0"},
+      "xG": {"h": "1.3", "a": "0.9"},
+      "datetime": "2023-08-21 16:30:00",
+      "forecast": {"w": "0.42", "d": "0.29", "l": "0.29"}
+    }
+  ]
+}
