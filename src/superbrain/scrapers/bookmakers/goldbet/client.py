@@ -209,9 +209,7 @@ class GoldbetClient:
 
         async def _one_shot() -> Any:
             await self._limiter.wait()
-            r = await session.get(
-                url, headers=_MANDATORY_HEADERS, timeout=self.timeout_seconds
-            )
+            r = await session.get(url, headers=_MANDATORY_HEADERS, timeout=self.timeout_seconds)
             status = r.status_code
             if status == 403:
                 raise GoldbetForbiddenError(f"403 at {url}")
