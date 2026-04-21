@@ -533,6 +533,38 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 
 ---
 
+### Deploy (phase 9, 2026-04-21)
+
+- **API on Fly.io.** `deploy/api/Dockerfile` is a slim Debian (glibc, because
+  `curl_cffi` has no musl wheels) image built from `python:3.12-slim`, with
+  `uv 0.5.29` driving a `--frozen` install into `/opt/venv`. Runs as
+  non-root `superbrain`. Exposes 8080, `HEALTHCHECK` polls `/health` every
+  30 s. `deploy/api/fly.toml` targets the free tier: 1 shared-cpu-1x /
+  256 MB / `auto_stop_machines = "stop"` so the machine scales to zero
+  when idle (first request after idle pays ~2 s cold-start).
+- **Shared volume.** Both the API app (this phase) and the scheduler worker
+  (Phase 5) mount the same Fly volume `superbrain_data` at `/data`, which
+  holds the Parquet lake under `/data/lake`. Single-writer on writes
+  (scheduler), single-reader on reads (API) — no contention, no sync layer.
+  Pick one region for the volume (we default `fra`); both apps must deploy
+  to that region or the volume won't mount.
+- **SPA on Vercel.** `frontend/vercel.json` pins `framework=vite`,
+  `buildCommand=npm run build`, `outputDirectory=dist`, installs with
+  `npm ci` (lockfile ships pinned to `registry.npmjs.org` since 2026-04-21
+  to avoid the BendingSpoons JFrog 401 on CI). SPA fallback rewrite serves
+  `/index.html` for every route; immutable cache headers on `/assets/*`;
+  baseline security headers (X-Content-Type-Options, Referrer-Policy,
+  Permissions-Policy).
+- **Ops surface.** Two env vars drive the SPA: `VITE_API_BASE_URL` and
+  `VITE_API_TOKEN`; three env vars drive the API: `SUPERBRAIN_API_TOKENS`,
+  `SUPERBRAIN_CORS_ORIGINS`, `SUPERBRAIN_LAKE_PATH`. Full runbook in
+  `docs/deployment/api-and-spa.md`; rollback is `fly releases` + redeploy
+  by tag, or `vercel rollback`.
+- **Free-tier fit.** Fly free = 3 machines @ 256 MB + 3 GB volume total; we
+  use 2 machines (API + scheduler) + 1 GB volume. Vercel Hobby = 100 GB/mo
+  bandwidth; three internal users burn <1 GB. No paid tiers needed at
+  current usage.
+
 ## Gotchas
 
 *Add new gotchas here whenever you debug something that cost you more than 10 minutes.*
