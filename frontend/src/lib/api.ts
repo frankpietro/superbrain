@@ -10,6 +10,8 @@ import {
   scraperStatusResponse,
   valueBetsResponse,
   marketListResponse,
+  trendsVariabilityResponse,
+  trendsTimeToKickoffResponse,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -160,6 +162,22 @@ export const api = {
   valueBets: (params?: { league?: string; min_edge?: number }) =>
     apiFetch("/bets/value", valueBetsResponse, { query: params }),
   marketList: () => apiFetch("/bets/markets", marketListResponse),
+  trendsVariability: (params: {
+    group_by: "market" | "team" | "match";
+    league?: string;
+    bookmaker?: string;
+    since_hours?: number;
+    min_points?: number;
+    limit?: number;
+  }) => apiFetch("/trends/variability", trendsVariabilityResponse, { query: params }),
+  trendsTimeToKickoff: (params?: {
+    bucket_hours?: number;
+    league?: string;
+    bookmaker?: string;
+    market?: string;
+    since_hours?: number;
+    min_points?: number;
+  }) => apiFetch("/trends/time-to-kickoff", trendsTimeToKickoffResponse, { query: params }),
   runBacktest: (body: {
     league: string;
     season: string;

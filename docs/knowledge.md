@@ -126,6 +126,7 @@ Routes:
 | `/scrapers` | Per-bookmaker tiles: status, rows written, unmapped markets, rows-written history chart, trigger button. |
 | `/bets/value` | Empty state until the engine ships in phase 4b; sortable table when items arrive. |
 | `/backtest` | Form → `POST /backtest/run`; 501 is caught and rendered as a friendly toast. |
+| `/trends` | Odds-volatility analytics (see *Trends analytics* below). |
 | `/settings` | Active token (masked), theme, timezone, API base URL. |
 
 Env: copy `frontend/.env.example` → `frontend/.env.local` and set
@@ -460,7 +461,44 @@ Shipped as a **main-forward** corpus rather than a legacy-equivalence one. Ratio
 
 Legacy-equivalence comparison is *not* deferred — it's retired. If we ever want it, the shape translator described in the phase 4b TODO is still the right design, but it's now a future-optional exercise, not a blocker.
 
-### Dev environment
+### Trends analytics (phase 10, 2026-04-21)
+
+Purpose: surface what *historical odds movement* tells us about the
+market, without any modeling overhead. Everything reads the lake's
+`odds` table; nothing writes.
+
+A **series** is one selection's payout through time, keyed by
+`(bookmaker, bookmaker_event_id, market, market_params_hash,
+selection)`. Series with `< min_points` captures in the window (default
+3) are dropped before aggregation.
+
+- `GET /trends/variability?group_by=market|team|match` — per-series
+  coefficient of variation (`stddev/mean`, ddof=0) and range
+  (`(max-min)/mean`) in percent, then averaged inside each bucket.
+  `team` unions home-side and away-side rows so a team gets credit
+  for both sides of the ledger. Returns `avg_cv_pct`, `max_cv_pct`,
+  `avg_range_pct`, `avg_payout`, `series_count`, `observation_count`,
+  and the set of leagues touched. Sorted by `-avg_cv_pct`, capped at
+  `limit` (default 50, max 500).
+- `GET /trends/time-to-kickoff?bucket_hours=6` — for every consecutive
+  capture pair in each series, compute the absolute percent change and
+  the midpoint's distance to kickoff; bucket by
+  `floor(hours_to_kickoff / bucket_hours) * bucket_hours`. Each bucket
+  reports `n_transitions`, `n_series`, mean / median / p90 of
+  `abs_delta_pct`, and `prob_any_change = mean(delta > 0)`. Pre-kickoff
+  transitions only. Kickoff is proxied by `match_date` at 00:00 UTC —
+  the `odds` schema has no `kickoff_at`; swap once we enrich.
+- Both endpoints accept `league`, `bookmaker`, `since_hours` (default
+  168 = 7 days, max 1 year). Blocking Polars work runs through
+  `anyio.to_thread.run_sync`.
+
+Frontend at `/trends` (`frontend/src/routes/trends.tsx`) renders the
+variability response as a sortable table plus a top-N Plotly bar chart
+(with a market/team/match tab switcher) and the time-to-kickoff
+response as a combined line+bar chart — mean absolute delta vs. change
+probability across buckets — with a `bucket_hours` slider. Tests live
+in `tests/api/test_trends.py` (11 cases; seeded in-memory lake via
+`Lake.write_odds`).
 
 Trade-offs made on the owner's personal dev machine. See `AGENTS.md` → "Operating principle".
 

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/stores/auth";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const NAV: NavLink[] = [
   { to: "/scrapers", label: "Scrapers", icon: Activity },
   { to: "/bets/value", label: "Value bets", icon: Sparkles },
   { to: "/backtest", label: "Backtest", icon: GanttChart },
+  { to: "/trends", label: "Trends", icon: TrendingUp },
 ];
 
 export function AppShell() {

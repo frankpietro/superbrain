@@ -24,6 +24,7 @@ from superbrain.api.routers import health as health_router
 from superbrain.api.routers import matches as matches_router
 from superbrain.api.routers import odds as odds_router
 from superbrain.api.routers import scrapers as scrapers_router
+from superbrain.api.routers import trends as trends_router
 from superbrain.data.connection import Lake
 
 
@@ -72,6 +73,7 @@ def create_app(settings: Settings | None = None, *, lake: Lake | None = None) ->
     app.include_router(scrapers_router.router)
     app.include_router(bets_router.router)
     app.include_router(backtest_router.router)
+    app.include_router(trends_router.router)
 
     _install_exception_handler(app)
     return app
