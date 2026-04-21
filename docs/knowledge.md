@@ -243,7 +243,7 @@ path can fire without producing duplicates.
 | Job | Trigger | Rationale |
 |-----|---------|-----------|
 | `scrape_sisal` | every 15 min, offset 0 | Matches the Sisal scraper's rate-limit contract (≥10 s between bookmaker requests, adaptive throttling). 15 min × ≈180 events = ~750 requests / hour, well under the "burst-tolerant but sustained-sensitive" threshold observed in phase 3. |
-| `scrape_goldbet` | every 15 min, offset +5 min | Goldbet's Akamai shield reacts to parallel traffic on the same minute. Staggering avoids simultaneous firing across the three bookmakers. |
+| `scrape_goldbet` | every 15 min, offset +5 min | Goldbet's Akamai shield reacts to parallel traffic on the same minute. Staggering avoids simultaneous firing across the three bookmakers. **Runtime ≈ 20–21 min** at the 1 req/s Akamai-safe rate across top-5 leagues (~1,225 requests), so `job_timeout_seconds` is 1800 s and the 15-min cadence overlaps — APScheduler's per-job `max_instances` (=`max_concurrent_jobs`, default 2) caps the pile-up. |
 | `scrape_eurobet` | every 15 min, offset +10 min | Eurobet's Cloudflare mirrors the Goldbet concern; 10 min offset keeps the three scrapers strictly out-of-phase. |
 | `backfill_historical` | daily cron `0 4 * * mon-fri`, UTC | Football-data + Understat only refresh after midweek fixtures settle; Mon–Fri 04:00 UTC catches every tier-1 weekend and midweek round without re-fetching unchanged seasons. |
 
@@ -578,6 +578,12 @@ the code.
 - **Rate limit & concurrency.** ≤ 1 HTTP req/s (token bucket);
   `asyncio.Semaphore(3)` on per-event market fetches; tenacity with 3
   attempts + expo backoff + jitter; `403` triggers one cookie refresh.
+  The bucket is **global per client**, so the semaphore does not
+  increase throughput — it only limits queued coroutines. Top-5
+  leagues today mean ~47 events × 26 tab calls + 5 league calls ≈
+  1,225 requests ≈ **20–21 minutes wall-clock** per full scrape; the
+  scheduler's `job_timeout_seconds` must stay above that (see
+  *Scheduler & deployment* / 2026-04-21 timeout bump).
 - **Known product gaps.** No shots / tiri markets on Serie A regular
   season. No team-specific cards O/U (Sanzioni tab is coach bookings,
   penalty markets, VAR specials only). Anytime / first-goalscorer
@@ -746,6 +752,19 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 - 2026-04-21 — **Understat doesn't embed `datesData` anymore.** The old `JSON.parse` block on the league HTML page is gone (site redesign). Don't parse the league HTML. Use the internal AJAX endpoint `GET https://understat.com/getLeagueData/<league_slug>/<start_year>` with header `X-Requested-With: XMLHttpRequest`; it returns the full JSON payload (`dates`, `teams`, `players`). Our `understat.py` implements it directly in `httpx`; no `understatapi` dep.
 - 2026-04-21 — **The old repo's DuckDB schema is not portable.** Three separate SQLite files (`historical.db`, `betting_odds.db`, `simulations.db`) with overlapping keys. The migration script normalizes teams and drops one-off schema tables. Do not copy the old schema into the new lake verbatim.
 - 2026-04-21 — **GitHub Actions cron minimum is effectively 5 minutes** and jobs are delayed under high platform load. The "always-on" piece must live on Fly.
+- 2026-04-21 — **Goldbet scheduled job was timing out.** Symptom:
+  `scheduler.job_timeout` at 600 s on `scrape_goldbet`, rows_written
+  0, while the scrape was visibly making progress (many
+  `unmapped_market` log lines). Root cause: the 1 req/s Akamai-safe
+  rate × 26 market tabs × ~47 top-5 events ≈ 20–21 min wall-clock, so
+  the 10-min `SchedulerSettings.job_timeout_seconds` default killed
+  every run. Fix: raise default to 1800 s in
+  `src/superbrain/scheduler/config.py` and mirror in
+  `fly.toml::SUPERBRAIN_SCHEDULER_JOB_TIMEOUT_SECONDS`. Sisal and
+  Eurobet are unaffected (both finish under 90 s). Reminder: the
+  Goldbet rate limiter is a **global leaky-bucket per client**, so
+  the `asyncio.Semaphore(3)` on per-event fetches does not shorten
+  wall-clock — don't try to "fix" runtime by raising the semaphore.
 - 2026-04-21 — **GENERAL: APScheduler's `CronTrigger.from_crontab`
   uses APScheduler-native weekday indexing** (0=Mon..6=Sun), not POSIX
   cron (0=Sun..6=Sat). `"0 4 * * 1-5"` therefore fires Tue–Sat, not
