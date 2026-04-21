@@ -12,9 +12,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-import { useAuth } from "@/stores/auth";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 interface NavLink {
   to: string;
@@ -48,7 +46,6 @@ function isActive(to: string, pathname: string): boolean {
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const clearToken = useAuth((s) => s.clear);
 
   return (
     <div className="flex min-h-screen">
@@ -139,14 +136,6 @@ export function AppShell() {
             <CircleUserRound className="h-4 w-4" aria-hidden="true" />
             Settings
           </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-muted-foreground"
-            onClick={clearToken}
-          >
-            Sign out
-          </Button>
         </div>
       </aside>
       <main className="flex-1 overflow-x-hidden">
@@ -155,9 +144,6 @@ export function AppShell() {
             <Brain className="h-4 w-4 text-primary" aria-hidden="true" />
             <span className="text-sm font-semibold">Superbrain</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={clearToken}>
-            Sign out
-          </Button>
         </header>
         <div className="mx-auto max-w-[1400px] p-6 md:p-8">
           <div className="mb-6 flex items-center gap-2 text-xs text-muted-foreground md:hidden">

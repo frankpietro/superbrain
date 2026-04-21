@@ -45,11 +45,9 @@ def _seed_runs(lake: Lake) -> None:
     )
 
 
-def test_runs_list_newest_first(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_runs_list_newest_first(client: TestClient, lake: Lake) -> None:
     _seed_runs(lake)
-    resp = client.get("/scrapers/runs", headers=auth_header)
+    resp = client.get("/scrapers/runs")
     assert resp.status_code == 200
     items = resp.json()["items"]
     assert len(items) == 3
@@ -57,17 +55,15 @@ def test_runs_list_newest_first(
     assert ts == sorted(ts, reverse=True)
 
 
-def test_runs_bookmaker_filter(client: TestClient, lake: Lake, auth_header: dict[str, str]) -> None:
+def test_runs_bookmaker_filter(client: TestClient, lake: Lake) -> None:
     _seed_runs(lake)
-    resp = client.get("/scrapers/runs", params={"bookmaker": "goldbet"}, headers=auth_header)
+    resp = client.get("/scrapers/runs", params={"bookmaker": "goldbet"})
     assert resp.json()["count"] == 1
 
 
-def test_status_aggregates_last_24h(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_status_aggregates_last_24h(client: TestClient, lake: Lake) -> None:
     _seed_runs(lake)
-    resp = client.get("/scrapers/status", headers=auth_header)
+    resp = client.get("/scrapers/status")
     assert resp.status_code == 200
     body = resp.json()
     blocks = {b["bookmaker"]: b for b in body["items"]}
@@ -94,9 +90,7 @@ def test_status_aggregates_last_24h(
     assert eurobet["history"] == []
 
 
-def test_status_normalises_success_status_to_ok(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_status_normalises_success_status_to_ok(client: TestClient, lake: Lake) -> None:
     """Real scrapers write ``status='success'``; the API must emit ``'ok'``.
 
     Without normalisation the SPA's badge logic (``status === 'ok'``) would
@@ -113,7 +107,7 @@ def test_status_normalises_success_status_to_ok(
             rows_written=10_000,
         )
     )
-    resp = client.get("/scrapers/status", headers=auth_header)
+    resp = client.get("/scrapers/status")
     assert resp.status_code == 200
     sisal = next(b for b in resp.json()["items"] if b["bookmaker"] == "sisal")
     assert sisal["last_run"]["status"] == "ok"
@@ -121,7 +115,5 @@ def test_status_normalises_success_status_to_ok(
     assert sisal["errors_24h"] == 0
     assert sisal["history"][0]["status"] == "ok"
 
-    runs = client.get("/scrapers/runs", params={"bookmaker": "sisal"}, headers=auth_header).json()[
-        "items"
-    ]
+    runs = client.get("/scrapers/runs", params={"bookmaker": "sisal"}).json()["items"]
     assert runs[0]["status"] == "ok"

@@ -49,7 +49,7 @@ AI-owned football value-bet platform: continuous scrapers → DuckDB+Parquet lak
 | Fact | Value |
 |------|-------|
 | Codebase umbrella | `superbrain` (Python monorepo + `frontend/` SPA) |
-| Primary surface | Web SPA at a Vercel URL, authenticated with bearer tokens |
+| Primary surface | Web SPA at a Vercel URL (unauthenticated — see 2026-04-21 entry removing bearer tokens) |
 | MVP scope | Top-5 European leagues, 2020-21 → present; Sisal + Goldbet + Eurobet odds across all markets they expose |
 | Monetisation | None; personal tool for three owners |
 | Platform | Fly.io Hobby (backend always-on) + Vercel free (frontend) + GitHub Actions (fallback scrapers) |
@@ -64,12 +64,13 @@ AI-owned football value-bet platform: continuous scrapers → DuckDB+Parquet lak
 | 2026-04-21 | Odds: hidden-API sniffing first (direct `httpx` against discovered JSON endpoints), Playwright only as a per-bookmaker fallback, no OCR unless forced. | Hidden JSON endpoints are faster and more robust than HTML parsing. |
 | 2026-04-21 | Scope: scrape every market each bookmaker exposes — the 23 markets from the old repo are a floor, not a ceiling. | User directive. |
 | 2026-04-21 | Always-on scraping: APScheduler lives inside the Fly.io backend process; GitHub Actions is the scheduled redundant fallback. | Fly Hobby gives one always-on machine for free; we get continuous scraping without a second service. |
-| 2026-04-21 | Contributor ingestion: every scrape (local, GH Actions, or in-process) POSTs to the backend's `/ingest/odds` endpoint with a bearer token. No one needs push access to a data branch or cloud bucket credentials. | User directive: easy onboarding for collaborators. |
+| 2026-04-21 | ~~Contributor ingestion: every scrape (local, GH Actions, or in-process) POSTs to the backend's `/ingest/odds` endpoint with a bearer token.~~ Superseded 2026-04-21 by auth-removal entry below; the ingest flow stays in-process via the scheduler for now. | User directive: easy onboarding for collaborators. |
 | 2026-04-21 | Storage: DuckDB over a partitioned Parquet lake under `data/lake/`. One authoritative DuckDB file at `data/superbrain.duckdb` defines views. | Fastest free option; polars-native; versionable; archetype-aligned. |
 | 2026-04-21 | Algorithm extension strategy: bet-agnostic engine — each bet type declares `target_stat_columns` and a probability function; engine re-runs per bet. | Cheapest way to add new markets; matches the old `refactored_src` direction. |
 | 2026-04-21 | Feature selection: automated ablation (randomized search over stat subsets + clustering hyperparameters, scored by backtest ROI on held-out seasons). No static CLI. | Bet-agnostic and extensible by construction; interaction via SPA only. |
 | 2026-04-21 | Frontend stack: Vite + React + TypeScript + Tailwind + shadcn/ui + zustand + TanStack Query + TanStack Router. Charts via react-plotly.js. | Matches Gaia's `personal-web-spa` archetype; composes with backend plotly.graph_objects. |
-| 2026-04-21 | Access control: three static bearer tokens minted by the owner, persisted in `localStorage`, sent as `Authorization: Bearer …` to the backend. | Three users; OAuth is overkill; matches "trade security for convenience" on personal infra. |
+| 2026-04-21 | ~~Access control: three static bearer tokens minted by the owner, persisted in `localStorage`, sent as `Authorization: Bearer …` to the backend.~~ See 2026-04-21 entry below — bearer auth was removed on user directive. | Three users; OAuth is overkill; matches "trade security for convenience" on personal infra. |
+| 2026-04-21 | Access control: **none** for now. The API and SPA are fully unauthenticated; the platform relies on URL obscurity. `require_auth` + the login page + `SUPERBRAIN_API_TOKENS` + `VITE_API_TOKEN` are all deleted. Revisit if/when the platform is exposed beyond the three owners. | User directive — bearer-token flow was more friction than the three-user threat model warranted. |
 
 ### Preserved learnings from the old `fbref24` repo
 
@@ -84,14 +85,14 @@ The old `refactored_src/` was the most complete variant. Things worth preserving
 
 ## User journey & UX
 
-1. Owner opens the SPA at the Vercel URL; logs in with a bearer token.
+1. Owner opens the SPA at the Vercel URL (no login — see the 2026-04-21 access-control entry).
 2. Landing on **Dashboard**: today's fixtures + live value bets table, sortable by edge / league / bookmaker. Clicking a bet shows its full math trace.
 3. **Matches** lets drill-down into per-match odds across bookmakers and markets.
 4. **Backtest** runs a sliding-window backtest with a parameter form; results stream in via SSE.
 5. **Ablation** kicks off an automated feature search per market/league; winners flow back into the engine.
 6. **Analytics**: ROI, Kelly sizing, calibration, drawdown, cohorts — plotly charts.
 7. **Bet Log**: record placed bets, mark outcomes later, see personal ROI.
-8. **Settings**: mint/rotate bearer tokens, toggle Telegram alerts, configure scheduling.
+8. **Settings**: theme, timezone, and display preferences. (Bearer-token management removed 2026-04-21.)
 9. Telegram alerts fire out-of-band when new high-edge bets appear.
 
 ---
@@ -109,9 +110,9 @@ Python monorepo.
 | Styling | Tailwind 3 + shadcn/ui-style primitives hand-copied under `frontend/src/components/ui/` (no CLI; kept only the ones we use) |
 | Routing | TanStack Router 1 (code-based tree in `frontend/src/router.tsx`) |
 | Data fetching | TanStack Query 5; stale-time 30 s, no refetch-on-focus, retries disabled for 401/404 |
-| Global state | `zustand` with `persist`; `superbrain.auth` (bearer token) + `superbrain.prefs` (theme, timezone, selected leagues) — both in `localStorage` |
+| Global state | `zustand` with `persist`; `superbrain.prefs` (theme, timezone, selected leagues) in `localStorage`. (The auth store was removed 2026-04-21.) |
 | Boundary validation | `zod` schemas in `frontend/src/lib/types.ts`; every API response is `safeParse`d and malformed payloads raise `ApiParseError` for a banner (never a blank screen) |
-| API client | `frontend/src/lib/api.ts` — typed `apiFetch<T>(path, schema, opts)`, bearer-token header, base URL from `VITE_API_BASE_URL`; 401 auto-clears the token |
+| API client | `frontend/src/lib/api.ts` — typed `apiFetch<T>(path, schema, opts)`, base URL from `VITE_API_BASE_URL`. Unauthenticated since 2026-04-21. |
 | Charts | `react-plotly.js` over `plotly.js-cartesian-dist-min` (saves ~3 MB vs `plotly.js-dist`); component wrapper at `src/components/plot.tsx` |
 | Tests | Vitest + React Testing Library + `@testing-library/jest-dom`; `src/test/setup.ts` installs an in-memory `Storage` because Node 25 ships an experimental `localStorage` that conflicts with jsdom |
 | Lint / format | ESLint flat-ish (`.eslintrc.cjs`) with `@typescript-eslint` + Prettier; `--max-warnings 0` |
@@ -120,7 +121,6 @@ Routes:
 
 | Path | Purpose |
 |------|---------|
-| `/login` | Bearer-token entry. Validates against `GET /health` + an authenticated probe. |
 | `/` | Dashboard: fixture / value-bet / scraper-health cards + today's matches table. |
 | `/matches` | Expandable card list — past and upcoming in one view (see *Matches page (2026-04-21)* below). |
 | `/matches/$id` | Fixture detail + odds pivot (markets × bookmakers, last-update tooltip). |
@@ -129,7 +129,7 @@ Routes:
 | `/bets/value` | Empty state until the engine ships in phase 4b; sortable table when items arrive. |
 | `/backtest` | Form → `POST /backtest/run`; renders a summary tile grid + sortable bets table with realised W/L/profit. |
 | `/trends` | Odds-volatility analytics (see *Trends analytics* below). |
-| `/settings` | Active token (masked), theme, timezone, API base URL. |
+| `/settings` | Theme, timezone, API base URL. |
 
 Env: copy `frontend/.env.example` → `frontend/.env.local` and set
 `VITE_API_BASE_URL`. Build/test:
@@ -428,7 +428,7 @@ superbrain/
 │   ├── ablation/             automated feature/column search
 │   ├── analytics/            ROI, Kelly, calibration, drawdown, cohorts
 │   ├── backtest/             sliding window + parallel grid
-│   └── api/                  FastAPI app, routers, auth, scheduler, alerts
+│   └── api/                  FastAPI app, routers, scheduler, alerts
 ├── frontend/                 Vite + React SPA
 ├── scripts/                  one-off maintenance, legacy imports
 ├── tests/                    pytest
@@ -902,11 +902,11 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
   `/index.html` for every route; immutable cache headers on `/assets/*`;
   baseline security headers (X-Content-Type-Options, Referrer-Policy,
   Permissions-Policy).
-- **Ops surface.** Two env vars drive the SPA: `VITE_API_BASE_URL` and
-  `VITE_API_TOKEN`; three env vars drive the API: `SUPERBRAIN_API_TOKENS`,
-  `SUPERBRAIN_CORS_ORIGINS`, `SUPERBRAIN_LAKE_PATH`. Full runbook in
+- **Ops surface.** One env var drives the SPA: `VITE_API_BASE_URL`; two
+  env vars drive the API: `SUPERBRAIN_CORS_ORIGINS`,
+  `SUPERBRAIN_LAKE_PATH`. Full runbook in
   `docs/deployment/api-and-spa.md`; rollback is `fly releases` + redeploy
-  by tag, or `vercel rollback`.
+  by tag, or `vercel rollback`. (Bearer-token env vars removed 2026-04-21.)
 - **Free-tier fit.** Fly free = 3 machines @ 256 MB + 3 GB volume total; we
   use 2 machines (API + scheduler) + 1 GB volume. Vercel Hobby = 100 GB/mo
   bandwidth; three internal users burn <1 GB. No paid tiers needed at

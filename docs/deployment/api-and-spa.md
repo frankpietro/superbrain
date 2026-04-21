@@ -13,8 +13,6 @@ Prerequisites
 
 - A Fly.io account (`flyctl auth signup`) and `flyctl` on your PATH.
 - A Vercel account (`vercel login`) and the Vercel CLI on your PATH.
-- The shared API bearer token(s) agreed with the three humans who use the
-  platform.
 
 Topology
 --------
@@ -43,8 +41,8 @@ scheduler's writes are immediately visible to the API. The volume lives in a
 single region — pick one close to you (we default to `fra`, change the
 `primary_region` in both `fly.toml` files if you want).
 
-Step 1 — provision the shared volume and secrets
-------------------------------------------------
+Step 1 — provision the shared volume
+------------------------------------
 
 From the repo root:
 
@@ -57,10 +55,6 @@ fly volumes create superbrain_data \
   --app superbrain-api \
   --region fra \
   --size 1
-
-# Inject the bearer token(s). Comma-separated if multiple.
-fly secrets set --app superbrain-api \
-  SUPERBRAIN_API_TOKENS="replace-me-with-a-long-random-secret"
 ```
 
 Step 2 — deploy the API
@@ -94,8 +88,6 @@ cd frontend
 vercel link       # first time only; creates .vercel/project.json
 vercel env add VITE_API_BASE_URL production
 # paste: https://superbrain-api.fly.dev
-vercel env add VITE_API_TOKEN production
-# paste: the same bearer token you set on Fly
 vercel --prod
 ```
 

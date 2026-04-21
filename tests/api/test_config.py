@@ -17,7 +17,6 @@ from superbrain.api.config import Settings
 
 _ENV_KEYS = (
     "SUPERBRAIN_LAKE_PATH",
-    "SUPERBRAIN_API_TOKENS",
     "SUPERBRAIN_CORS_ORIGINS",
     "SUPERBRAIN_LOG_LEVEL",
     "SUPERBRAIN_REQUEST_ID_HEADER",
@@ -44,18 +43,6 @@ def _settings_no_env_file() -> Settings:
     return Settings(_env_file=None)
 
 
-def test_api_tokens_parse_csv_from_env(clean_env: pytest.MonkeyPatch) -> None:
-    clean_env.setenv("SUPERBRAIN_API_TOKENS", "alpha,beta,  gamma  ")
-    settings = _settings_no_env_file()
-    assert settings.api_tokens == ("alpha", "beta", "gamma")
-
-
-def test_api_tokens_single_value_from_env(clean_env: pytest.MonkeyPatch) -> None:
-    clean_env.setenv("SUPERBRAIN_API_TOKENS", "dev-token")
-    settings = _settings_no_env_file()
-    assert settings.api_tokens == ("dev-token",)
-
-
 def test_cors_origins_parse_csv_from_env(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv(
         "SUPERBRAIN_CORS_ORIGINS",
@@ -70,7 +57,6 @@ def test_cors_origins_parse_csv_from_env(clean_env: pytest.MonkeyPatch) -> None:
 
 def test_defaults_when_env_unset(clean_env: pytest.MonkeyPatch) -> None:
     settings = _settings_no_env_file()
-    assert settings.api_tokens == ("dev-token",)
     assert settings.cors_origins == ("http://localhost:5273",)
     assert settings.log_level == "INFO"
     assert settings.request_id_header == "x-request-id"

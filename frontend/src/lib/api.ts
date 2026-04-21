@@ -1,6 +1,4 @@
 import { z, type ZodType } from "zod";
-import { sanitizeBearerToken } from "@/lib/auth-token";
-import { getAuthToken, useAuth } from "@/stores/auth";
 import {
   backtestRunResponseSchema,
   healthResponse,
@@ -52,7 +50,6 @@ export interface RequestOptions {
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined | null | string[]>;
   signal?: AbortSignal;
-  authRequired?: boolean;
 }
 
 function buildQuery(query?: RequestOptions["query"]): string {
@@ -75,30 +72,9 @@ export async function apiFetch<T>(
   schema: ZodType<T>,
   opts: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, query, signal, authRequired = true } = opts;
+  const { method = "GET", body, query, signal } = opts;
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-
-  const token = getAuthToken();
-  if (token) {
-    // Belt-and-braces: the auth store already sanitizes, but a stale
-    // localStorage entry from a pre-fix build could still carry an unsafe
-    // character. Reject here before fetch() crashes with the cryptic
-    // "String contains non ISO-8859-1 code point" error.
-    const check = sanitizeBearerToken(token);
-    if (!check.ok) {
-      useAuth.getState().clear();
-      throw new ApiError(
-        `Stored token is unusable (${check.reason}). Re-enter it on the login page.`,
-        401,
-        { detail: "invalid stored token" },
-      );
-    }
-    headers.Authorization = `Bearer ${check.token}`;
-  }
-  if (authRequired && !token) {
-    throw new ApiError("Not authenticated", 401, { detail: "missing token" });
-  }
 
   const url = `${getBaseUrl()}${path}${buildQuery(query)}`;
   let response: Response;
@@ -121,9 +97,6 @@ export async function apiFetch<T>(
   const raw: unknown = ct.includes("application/json") ? await response.json() : await response.text();
 
   if (!response.ok) {
-    if (response.status === 401) {
-      useAuth.getState().clear();
-    }
     const detail =
       (typeof raw === "object" && raw !== null && "detail" in raw && (raw as { detail?: unknown }).detail) ||
       response.statusText ||
@@ -142,8 +115,7 @@ export async function apiFetch<T>(
 }
 
 export const api = {
-  health: () => apiFetch("/health", healthResponse, { authRequired: false }),
-  verifyToken: () => apiFetch("/matches", matchesResponse, { query: { limit: 1 } }),
+  health: () => apiFetch("/health", healthResponse),
   listMatches: (params: {
     leagues?: string[];
     date_from?: string;

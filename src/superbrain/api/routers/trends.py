@@ -27,7 +27,7 @@ import anyio
 import polars as pl
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from superbrain.api.deps import get_lake, require_auth
+from superbrain.api.deps import get_lake
 from superbrain.api.schemas import (
     TrendsTimeToKickoffResponse,
     TrendsTtkBucket,
@@ -37,7 +37,7 @@ from superbrain.api.schemas import (
 from superbrain.core.markets import MARKET_METADATA, Market
 from superbrain.data.connection import Lake
 
-router = APIRouter(prefix="/trends", tags=["trends"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/trends", tags=["trends"])
 
 _GROUP_BY_CHOICES = {"market", "team", "match"}
 _DEFAULT_SINCE_HOURS = 24 * 7

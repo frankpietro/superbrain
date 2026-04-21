@@ -11,13 +11,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
-from superbrain.api.deps import require_auth
 from superbrain.api.schemas import MarketInfo, Page
 from superbrain.core.markets import MARKET_METADATA
 
-router = APIRouter(prefix="/bets", tags=["bets"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/bets", tags=["bets"])
 
 _ENGINE_NOT_WIRED = "engine not yet wired"
 

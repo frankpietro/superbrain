@@ -10,7 +10,7 @@ import anyio
 import polars as pl
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from superbrain.api.deps import get_lake, require_auth
+from superbrain.api.deps import get_lake
 from superbrain.api.schemas import (
     MatchDetail,
     MatchOddsGroup,
@@ -22,7 +22,7 @@ from superbrain.api.schemas import (
 )
 from superbrain.data.connection import Lake
 
-router = APIRouter(prefix="/matches", tags=["matches"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/matches", tags=["matches"])
 
 _MAX_LIMIT = 500
 

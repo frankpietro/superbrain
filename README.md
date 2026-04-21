@@ -12,7 +12,7 @@ Superbrain replaces the old `fbref24` prototype with a clean, reliable, always-o
 - **Bet-agnostic value-bet engine** ported behaviour-preserving from `fbref24/refactored_src/engine/` and locked under a golden regression corpus.
 - **DuckDB + partitioned Parquet lake** — one authoritative store for every query.
 - **FastAPI backend** running on Fly.io (Hobby free tier, always-on). Hosts the API, the APScheduler scraper loop, the Telegram alerts dispatcher, and the ingestion endpoint any collaborator uploads scrape output to.
-- **Vite + React + TypeScript + Tailwind + shadcn/ui** SPA on Vercel free tier, authenticated with bearer tokens (three owners).
+- **Vite + React + TypeScript + Tailwind + shadcn/ui** SPA on Vercel free tier, shared by the three owners (no authentication — lives behind the obscurity of the URL for now).
 - **GitHub Actions** runs redundant scheduled scrapes, CI, and the weekly backtest refresh.
 
 ## Architecture at a glance
@@ -67,14 +67,13 @@ superbrain/
 
 ## For new contributors
 
-You are one of the three owners. You never need to open a terminal to use the platform — you log into the SPA with your bearer token. You only need the local toolchain if you want to run a scraper or help debug.
+You are one of the three owners. You never need to open a terminal to use the platform — you just open the SPA URL. You only need the local toolchain if you want to run a scraper or help debug.
 
 ```bash
 git clone https://github.com/frankpietro/superbrain.git
 cd superbrain
 uv sync --all-extras --dev
 cp .env.example .env
-# fill in SUPERBRAIN_INGEST_TOKEN with a token the owner minted for you
 uv run pytest        # smoke test everything still compiles
 ```
 
@@ -117,14 +116,12 @@ Quick shape:
 # API (Fly)
 fly launch --config deploy/api/fly.toml --no-deploy --copy-config --name superbrain-api
 fly volumes create superbrain_data --app superbrain-api --region fra --size 1
-fly secrets set --app superbrain-api SUPERBRAIN_API_TOKENS="<long-random>"
 fly deploy --config deploy/api/fly.toml --dockerfile deploy/api/Dockerfile
 
 # SPA (Vercel)
 cd frontend
 vercel link
 vercel env add VITE_API_BASE_URL production   # → https://superbrain-api.fly.dev
-vercel env add VITE_API_TOKEN    production   # → same token
 vercel --prod
 ```
 

@@ -134,37 +134,27 @@ def _seed_backtest_lake(lake: Lake) -> list[Match]:
     return matches
 
 
-def test_backtest_requires_auth(client: TestClient) -> None:
-    resp = client.post("/backtest/run", json={"league": "serie_a", "season": "2023-24"})
-    assert resp.status_code == 401
-
-
-def test_backtest_rejects_unknown_league(client: TestClient, auth_header: dict[str, str]) -> None:
+def test_backtest_rejects_unknown_league(client: TestClient) -> None:
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={"league": "not_a_league", "season": "2023-24"},
     )
     assert resp.status_code == 400
     assert "unknown league" in resp.json()["detail"]
 
 
-def test_backtest_rejects_unknown_market(client: TestClient, auth_header: dict[str, str]) -> None:
+def test_backtest_rejects_unknown_market(client: TestClient) -> None:
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={"league": "serie_a", "season": "2023-24", "market": "zzz"},
     )
     assert resp.status_code == 400
     assert "unknown market" in resp.json()["detail"]
 
 
-def test_backtest_on_empty_lake_returns_zero_bets(
-    client: TestClient, auth_header: dict[str, str]
-) -> None:
+def test_backtest_on_empty_lake_returns_zero_bets(client: TestClient) -> None:
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={"league": "serie_a", "season": "2023-24"},
     )
     assert resp.status_code == 200
@@ -176,13 +166,10 @@ def test_backtest_on_empty_lake_returns_zero_bets(
     assert body["summary"]["hit_rate"] == 0.0
 
 
-def test_backtest_on_seeded_lake_returns_wellformed_report(
-    client: TestClient, auth_header: dict[str, str], lake: Lake
-) -> None:
+def test_backtest_on_seeded_lake_returns_wellformed_report(client: TestClient, lake: Lake) -> None:
     matches = _seed_backtest_lake(lake)
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={
             "league": "serie_a",
             "season": "2023-24",
@@ -211,9 +198,7 @@ def test_backtest_on_seeded_lake_returns_wellformed_report(
         assert bet["stake"] == 10.0
 
 
-def test_backtest_with_too_many_clusters_returns_400(
-    client: TestClient, auth_header: dict[str, str], lake: Lake
-) -> None:
+def test_backtest_with_too_many_clusters_returns_400(client: TestClient, lake: Lake) -> None:
     """Default n_clusters=8 on a 5-team synthetic lake must 400, not 500.
 
     Guards the phase-10 graceful-failure contract: clustering errors should
@@ -223,7 +208,6 @@ def test_backtest_with_too_many_clusters_returns_400(
     _seed_backtest_lake(lake)
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={
             "league": "serie_a",
             "season": "2023-24",
@@ -236,13 +220,10 @@ def test_backtest_with_too_many_clusters_returns_400(
     assert "n_clusters" in resp.json()["detail"]
 
 
-def test_backtest_threshold_filters_best_effort(
-    client: TestClient, auth_header: dict[str, str], lake: Lake
-) -> None:
+def test_backtest_threshold_filters_best_effort(client: TestClient, lake: Lake) -> None:
     _seed_backtest_lake(lake)
     resp = client.post(
         "/backtest/run",
-        headers=auth_header,
         json={
             "league": "serie_a",
             "season": "2023-24",

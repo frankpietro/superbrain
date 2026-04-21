@@ -13,7 +13,6 @@ from superbrain.data.connection import Lake
 
 def test_unhandled_error_returns_generic_500_and_logs_structured(
     client: TestClient,
-    auth_header: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -23,7 +22,7 @@ def test_unhandled_error_returns_generic_500_and_logs_structured(
     monkeypatch.setattr(Lake, "read_odds", boom)
 
     with caplog.at_level(logging.ERROR, logger="superbrain.api.errors"):
-        resp = client.get("/odds", headers=auth_header)
+        resp = client.get("/odds")
 
     assert resp.status_code == 500
     assert resp.json() == {"detail": "internal"}

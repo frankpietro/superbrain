@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from superbrain.api.deps import get_lake, require_auth
+from superbrain.api.deps import get_lake
 from superbrain.api.schemas import (
     BacktestBetRow,
     BacktestRunRequest,
@@ -39,7 +39,7 @@ from superbrain.engine.pipeline import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/backtest", tags=["backtest"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
 @router.post("/run", response_model=BacktestRunResponse)

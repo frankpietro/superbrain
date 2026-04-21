@@ -1,1 +1,1 @@
-"""FastAPI backend: REST routes, bearer-token auth, APScheduler loop, alerts."""
+"""FastAPI backend: REST routes, APScheduler loop, alerts."""

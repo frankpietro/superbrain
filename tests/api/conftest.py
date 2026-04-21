@@ -27,15 +27,9 @@ from superbrain.data.connection import Lake
 
 
 @pytest.fixture()
-def token() -> str:
-    return "test-token"
-
-
-@pytest.fixture()
-def settings(tmp_path: Path, token: str) -> Settings:
+def settings(tmp_path: Path) -> Settings:
     return Settings(
         SUPERBRAIN_LAKE_PATH=tmp_path / "lake",
-        SUPERBRAIN_API_TOKENS=(token, "other-token"),
         SUPERBRAIN_CORS_ORIGINS=("http://localhost:5273",),
         SUPERBRAIN_LOG_LEVEL="WARNING",
     )
@@ -57,11 +51,6 @@ def app(settings: Settings, lake: Lake) -> FastAPI:
 def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
-
-
-@pytest.fixture()
-def auth_header(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
 
 
 def make_match(
