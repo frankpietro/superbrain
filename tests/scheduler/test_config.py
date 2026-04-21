@@ -17,7 +17,7 @@ def test_defaults_align_with_fly_toml(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.bookmaker_interval_minutes == 15
     assert s.bookmaker_stagger_minutes == 5
     assert s.historical_cron == "0 4 * * mon-fri"
-    assert s.job_timeout_seconds == 600
+    assert s.job_timeout_seconds == 1800
     assert s.max_concurrent_jobs == 2
     assert s.historical_leagues == DEFAULT_LEAGUES
 

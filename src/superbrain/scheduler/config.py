@@ -4,9 +4,11 @@ Every knob the scheduler exposes lives here. Defaults are tuned for the
 Fly.io Hobby free-tier machine described in
 ``docs/deployment/scheduler.md``: every 15 minutes per bookmaker
 (staggered 5 minutes apart so the three scrapers never fire at once),
-daily historical backfill at 04:00 UTC Mon-Fri, per-job timeout 10 min,
-max two overlapping jobs (one bookmaker + the tail of another,
-never three live HTTP workloads at once).
+daily historical backfill at 04:00 UTC Mon-Fri, per-job timeout 30 min
+(Goldbet's per-event tab-by-tab API needs ~20 min to cover all five
+leagues at the 1 req/s Akamai-safe rate; Sisal and Eurobet finish in
+under 90 s), max two overlapping jobs (one bookmaker + the tail of
+another, never three live HTTP workloads at once).
 
 The lake path defaults to ``./data/lake`` for local dev and is pinned to
 ``/data/lake`` by ``fly.toml`` so the persistent volume is authoritative
@@ -65,7 +67,7 @@ class SchedulerSettings(BaseSettings):
     historical_seasons: tuple[str, ...] = Field(default=DEFAULT_HISTORICAL_SEASONS)
     historical_sources: tuple[str, ...] = Field(default=DEFAULT_HISTORICAL_SOURCES)
 
-    job_timeout_seconds: int = Field(default=600, ge=30, le=6 * 3600)
+    job_timeout_seconds: int = Field(default=1800, ge=30, le=6 * 3600)
     max_concurrent_jobs: int = Field(default=2, ge=1, le=8)
 
     log_level: str = Field(default="INFO")
