@@ -65,3 +65,14 @@ title: Filter pytest-asyncio unraisable-exception leak on Python 3.12
 ---
 
 pytest-asyncio 1.x leaks an event loop + socket per module boundary on Python 3.12 via _temporary_event_loop_policy. When filterwarnings=['error'] is set (which we recommend), any later test that triggers gc.collect() (hypothesis' register_random does this on its own) converts those leaks into session-level failures via PytestUnraisableExceptionWarning. Until pytest-asyncio ships a fix, projects that use both async tests and filterwarnings=error should add 'ignore::pytest.PytestUnraisableExceptionWarning' to their pyproject.toml filterwarnings list. Consider documenting this in Tier-2 preferences under the testing section.
+
+---
+id: 2026-04-21-05
+tier: reference
+target: reference/patterns/frontend-plotly-sizing.md
+date: 2026-04-21
+status: pending
+title: react-plotly.js: wrapper must have concrete dimensions
+---
+
+When using react-plotly.js with useResizeHandler and style={{ width: '100%', height: '100%' }} on the inner <Plot>, the wrapper div MUST have concrete width/height. A bare <div> (no className, no inline size) collapses and Plotly's 100% has nothing to resolve against, so it falls back to its default autosize (~450×700 px) and overflows the parent slot — visibly leaking y-axis tick labels across surrounding UI. Proposed Gaia reference pattern: a short entry under reference/patterns/frontend-plotly-sizing.md recommending that any shared Chart/Plot wrapper default its outermost div to h-full w-full (or equivalent) and document the failure mode. Caught in superbrain's scrapers page; see docs/knowledge.md Gotchas (2026-04-21) and fix/scraper-card-chart-overflow.
