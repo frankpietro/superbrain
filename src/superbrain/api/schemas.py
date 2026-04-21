@@ -289,3 +289,63 @@ class TrendsTimeToKickoffResponse(BaseModel):
     bucket_hours: int
     total_transitions: int
     buckets: list[TrendsTtkBucket]
+
+
+class BacktestRunRequest(BaseModel):
+    """Body for ``POST /backtest/run``.
+
+    ``market`` is optional: omitted means "every registered market".
+    ``threshold`` is a best-effort filter on ``market_params.threshold``
+    (useful for O/U lines); ignored when the market has no threshold key.
+    """
+
+    league: str
+    season: str
+    market: str | None = None
+    edge_cutoff: float = Field(default=0.05, ge=0.0, le=1.0)
+    threshold: float | None = None
+    stake: float = Field(default=1.0, gt=0.0)
+    min_history_matches: int = Field(default=6, ge=1)
+    n_clusters: int | None = Field(default=None, ge=2)
+
+
+class BacktestBetRow(BaseModel):
+    """One placed bet in the response."""
+
+    match_id: str
+    match_date: str
+    home_team: str
+    away_team: str
+    market: str
+    selection: str
+    bookmaker: str
+    decimal_odds: float
+    model_probability: float
+    edge: float
+    stake: float
+    won: bool | None
+    payout: float
+    profit: float
+
+
+class BacktestSummary(BaseModel):
+    """Aggregate numbers computed by :func:`superbrain.engine.backtest.run_backtest`."""
+
+    n_bets: int
+    n_wins: int
+    n_losses: int
+    n_unresolved: int
+    total_stake: float
+    total_profit: float
+    roi: float
+    hit_rate: float
+    sharpe: float
+
+
+class BacktestRunResponse(BaseModel):
+    """Shape returned by ``POST /backtest/run``."""
+
+    request: BacktestRunRequest
+    fixtures_considered: int
+    summary: BacktestSummary
+    bets: list[BacktestBetRow]

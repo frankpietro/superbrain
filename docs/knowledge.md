@@ -28,6 +28,7 @@
 - [User journey & UX](#user-journey--ux)
 - [Architecture](#architecture)
 - [Alerts](#alerts-phase-8-2026-04-21)
+- [Backtest API wiring (phase 10)](#backtest-api-wiring-phase-10-2026-04-21)
 - [Conventions](#conventions)
 - [Algorithm correctness contract](#algorithm-correctness-contract)
 - [Scraper reliability contract](#scraper-reliability-contract)
@@ -126,7 +127,7 @@ Routes:
 | `/scrapers` | Per-bookmaker tiles (status, rows written, unmapped markets, rows-written history, trigger button) + a "Recent scraped odds" grid below: one card per `MarketCategory`, up to 6 most-recent rows across providers, 24 h window, refreshed on the same 30 s cadence. |
 | `/bets` | Recent-bets feed (index): newest-first, cursor-paginated table across providers. Filters: bookmaker multi-select (narrows client-side when >1 chosen because `GET /odds` accepts a single bookmaker), market dropdown (sections grouped by `MarketCategory`), `captured_from` (default last 24 h). |
 | `/bets/value` | Empty state until the engine ships in phase 4b; sortable table when items arrive. |
-| `/backtest` | Form → `POST /backtest/run`; 501 is caught and rendered as a friendly toast. |
+| `/backtest` | Form → `POST /backtest/run`; renders a summary tile grid + sortable bets table with realised W/L/profit. |
 | `/trends` | Odds-volatility analytics (see *Trends analytics* below). |
 | `/settings` | Active token (masked), theme, timezone, API base URL. |
 
@@ -583,6 +584,77 @@ probability across buckets — with a `bucket_hours` slider. Tests live
 in `tests/api/test_trends.py` (11 cases; seeded in-memory lake via
 `Lake.write_odds`).
 
+### Backtest API wiring (phase 10, 2026-04-21)
+
+Closes the only remaining stub from phase 6: `POST /backtest/run` was
+returning 501 "pending phase 4a merge" long after the engine had landed
+in phase 4b. The backtest engine itself (`superbrain.engine.backtest`
+with `run_backtest`, `BacktestReport`, `_NoLeakageLake`) has been in
+production use since phase 4b — `FeatureAblationStudy` consumes it — so
+this phase is pure HTTP + SPA surface, no new compute.
+
+Backend:
+
+- `POST /backtest/run` lives in `src/superbrain/api/routers/backtest.py`
+  and returns `BacktestRunResponse` (`summary` + per-bet rows + the
+  echoed `request`). Implementation is synchronous: the engine is
+  millisecond-fast on the slices the SPA sends (one league × one
+  season × optionally one market), so streaming over SSE would be
+  premature. If load ever demands streaming, the schema already fits
+  a per-bet payload; swap the handler body for `StreamingResponse`.
+- Request shape (`BacktestRunRequest`): `league`, `season`, optional
+  `market` (``None`` ⇒ every registered market), `edge_cutoff`
+  (default 0.05, mirrors the engine), `threshold` (best-effort
+  client-side filter on ``market_params.threshold``; kept for O/U
+  lines, silently ignored for markets without that param),
+  `stake` (default 1.0), `min_history_matches` (default 6),
+  `n_clusters` (override the pipeline default 8 — essential for
+  small synthetic lakes, harmless on real leagues).
+- Failure modes: unknown league / market → 400 with a clear
+  ``detail``. Clustering errors from sklearn (``"Cannot extract more
+  clusters than samples: N clusters for M leaves"``) are translated
+  to **400**, not 500 — the SPA can render a friendly message and the
+  user retries with fewer clusters. Everything else propagates to the
+  generic 500 handler.
+- Tests: `tests/api/test_backtest.py` seeds a deterministic 10-match,
+  5-team, goals-O/U-odds-only lake and asserts the endpoint returns
+  well-formed reports (``n_wins + n_losses + n_unresolved == n_bets``
+  and ``roi == total_profit / total_stake`` exact to 1e-9), 401 on
+  missing auth, 400 on unknown league / market / too-many-clusters,
+  empty response on an empty lake, and that `threshold=99.5` filters
+  to zero bets on the seeded lake. The old 501-stub assertion in
+  `tests/api/test_bets.py` was deleted.
+
+SPA:
+
+- `frontend/src/routes/backtest.tsx` was a fire-and-forget form that
+  showed a toast whatever happened. Now it runs the mutation, stores
+  `BacktestRunResponse` in react-query, and renders an 8-tile summary
+  grid (Fixtures / Bets placed / ROI / Hit rate / Total staked /
+  Total profit / Sharpe / Avg stake) plus a sortable bets table
+  (Date, Match, Market·Selection, Book, Odds, P(model), Edge,
+  Result, Profit). Colour coding: emerald on positive edge / profit,
+  rose on negative. Sort defaults to Edge ↓; clicking a sortable
+  header toggles direction. Added form knobs for Stake, Min-history,
+  and an "All markets" option (maps to `market: undefined`).
+- Types: `backtestRunResponseSchema` in `frontend/src/lib/types.ts`;
+  `api.runBacktest` now validates the full response shape
+  (`BacktestRunResponse`) via zod `safeParse`, so a backend schema
+  drift surfaces as `ApiParseError` with a banner instead of a blank
+  screen.
+
+Deferred for a future phase (not blocking anything today):
+
+- SSE streaming for longer multi-season backtests. Swap the synchronous
+  `return BacktestRunResponse(...)` for a `StreamingResponse` that
+  emits one bet per chunk; the SPA upgrades to `fetch` + `ReadableStream`.
+- Per-bet ROI curve / drawdown chart on the results page (Plotly).
+- Persisting runs to `data/backtest_runs/` the way `FeatureAblationStudy`
+  persists to `data/ablation_runs/`, so `/analytics` can draw comparisons
+  across parameter sweeps.
+
+### Dev environment
+
 Trade-offs made on the owner's personal dev machine. See `AGENTS.md` → "Operating principle".
 
 - 2026-04-21 — `gh auth` is GitHub-token plaintext (via keychain), active account `pfra-bs`. Revert: `gh auth logout`.
@@ -969,7 +1041,7 @@ Items that will be decided as phases land:
   don't silently miss completed scores once they wire up.
 - **SPA ↔ backend type sync** — 2026-04-21: `frontend/src/lib/types.ts` is hand-written to mirror `superbrain.core.models`. Swap to `openapi-typescript http://localhost:8100/openapi.json -o src/lib/api-types.ts` as soon as the Phase-6 FastAPI `/openapi.json` stabilises.
 - **SPA bundle splitting** — 2026-04-21: Plotly drags `dist/assets/index-*.js` to ~2 MB unminified (~645 KB gzipped). Acceptable for a 3-user internal tool. If we ever route public traffic at it, lazy-load `src/components/plot.tsx` via `React.lazy` and drop Plotly from the initial chunk.
-- **SPA value-bet and backtest screens** — 2026-04-21: ship phase 7 with empty-state UX against the Phase-6 stubs (`GET /bets/value` → `{items: []}`, `POST /backtest/run` → 501). Real wiring lands alongside the engine in phase 4b; the forms + sortable table are already in place.
+- ~~**SPA value-bet and backtest screens** — 2026-04-21: ship phase 7 with empty-state UX against the Phase-6 stubs (`GET /bets/value` → `{items: []}`, `POST /backtest/run` → 501). Real wiring lands alongside the engine in phase 4b; the forms + sortable table are already in place.~~ **Backtest wired 2026-04-21** as phase 10 (see *Backtest API wiring*); `GET /bets/value` remains the only stub.
 - ~~**Phase 4a follow-ups** (2026-04-21, tracked for phase 4b):~~
   1. ~~**Golden regression corpus.**~~ **Deferred 2026-04-21 to a dedicated PR.** See *Golden regression corpus TODO (phase 4b, 2026-04-21)* for the adapter; blocked on the pandas↔Polars shape mismatch documented there.
   2. ~~**End-to-end backtest + integration + no-leakage tests.**~~ **Shipped 2026-04-21** as `tests/engine/test_pipeline.py` + `tests/engine/test_backtest.py` (see *Ablation and engine tests (phase 4b, 2026-04-21)*).

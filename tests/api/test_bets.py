@@ -29,12 +29,6 @@ def test_markets_lists_every_registered_market(
         assert isinstance(row["selections"], list)
 
 
-def test_backtest_run_returns_501(client: TestClient, auth_header: dict[str, str]) -> None:
-    resp = client.post("/backtest/run", headers=auth_header)
-    assert resp.status_code == 501
-    assert "pending" in resp.json()["detail"]
-
-
 def test_stubs_require_auth(client: TestClient) -> None:
     assert client.get("/bets/value").status_code == 401
     assert client.get("/bets/markets").status_code == 401
