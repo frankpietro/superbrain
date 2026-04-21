@@ -16,7 +16,7 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -25,6 +25,7 @@ from superbrain.scrapers.bookmakers.goldbet.client import (
     WARMUP_URL,
     GoldbetClient,
     GoldbetError,
+    _SessionLike,
 )
 
 
@@ -66,7 +67,7 @@ def _json_response(payload: Any, status: int = 200) -> FakeResponse:
 
 
 def _client(handler: Callable[[str, dict[str, str]], FakeResponse]) -> GoldbetClient:
-    session = FakeSession(handler=handler)
+    session = cast(_SessionLike, FakeSession(handler=handler))
     # No rate-limit + no retry wait so tests stay fast.
     return GoldbetClient(session=session, min_interval_seconds=0.0, max_attempts=3)
 
@@ -182,7 +183,7 @@ class TestRateLimiter:
             return _json_response({"leo": [], "success": True})
 
         client = GoldbetClient(
-            session=FakeSession(handler=handler),
+            session=cast(_SessionLike, FakeSession(handler=handler)),
             min_interval_seconds=0.05,
             max_attempts=1,
         )

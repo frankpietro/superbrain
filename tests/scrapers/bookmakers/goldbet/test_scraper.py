@@ -18,14 +18,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 import pytest
 
 from superbrain.core.models import Bookmaker, League
 from superbrain.data.connection import Lake
-from superbrain.scrapers.bookmakers.goldbet.client import GoldbetClient
+from superbrain.scrapers.bookmakers.goldbet.client import GoldbetClient, _SessionLike
 from superbrain.scrapers.bookmakers.goldbet.scraper import scrape
 
 
@@ -132,7 +132,7 @@ def fake_client(
         markets_tab_multigol=markets_tab_multigol,
     )
     return GoldbetClient(
-        session=FakeSession(handler=handler),
+        session=cast(_SessionLike, FakeSession(handler=handler)),
         min_interval_seconds=0.0,
         max_attempts=2,
     )
@@ -197,7 +197,7 @@ class TestEndToEnd:
             return FakeResponse(status_code=500)
 
         client = GoldbetClient(
-            session=FakeSession(handler=broken),
+            session=cast(_SessionLike, FakeSession(handler=broken)),
             min_interval_seconds=0.0,
             max_attempts=2,
         )

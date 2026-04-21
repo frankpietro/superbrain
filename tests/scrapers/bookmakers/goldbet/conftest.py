@@ -17,7 +17,8 @@ FIXTURES_ROOT = Path(__file__).resolve().parents[3] / "fixtures" / "bookmakers" 
 
 
 def _load(name: str) -> dict[str, Any]:
-    return json.loads((FIXTURES_ROOT / name).read_text("utf-8"))
+    payload: dict[str, Any] = json.loads((FIXTURES_ROOT / name).read_text("utf-8"))
+    return payload
 
 
 @pytest.fixture
