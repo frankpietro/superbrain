@@ -262,10 +262,110 @@ Every scraper module satisfies:
 
 ---
 
+## Sisal scraper (phase 3, 2026-04-21)
+
+Production scraper lives in `src/superbrain/scrapers/bookmakers/sisal/`.
+Detailed README sits next to the code; this is the summary for future
+agents.
+
+**Architecture.** `scrape()` → `SisalClient` (async `httpx` + `tenacity`
+retries + per-endpoint `asyncio.Semaphore`) → `parse_event_markets()`
+(pure; never raises; returns `(list[OddsSnapshot], Counter[unmapped])`)
+→ `Lake.ingest_odds` + `Lake.log_scrape_run`. The orchestrator owns
+the run-id, `captured_at`, tree cache (1 h TTL, in-process), and the
+`SisalScrapeResult` bookkeeping.
+
+**Endpoints used.** `alberaturaPrematch` (tree),
+`v1/schedaManifestazione/0/{competitionKey}?offerId=0&metaTplEnabled=true&deep=true`
+(events per league), `schedaAvvenimento/{eventKey}?offerId=0`
+(~2 MB, ~130 markets per Serie A prematch fixture). All three are
+unauthenticated JSON over IPv4 from Italy — no cookies, no tokens.
+
+**Top-5 league keys.** `1-209` Serie A, `1-331` Premier,
+`1-228` Bundesliga, `1-570` La Liga, `1-781` Ligue 1 (all under
+`sportId=1`). The tree → key map is brittle on `urlAlias`; resolve by
+`descrizione` instead. Codified in `SISAL_LEAGUE_KEYS`.
+
+**Rate / concurrency.** One request per second per endpoint class
+(semaphore + minimum-interval limiter in `SisalClient`), event fetches
+bounded by `asyncio.Semaphore(4)` in the orchestrator. Retries on
+`429 / 502 / 503 / 504` and network errors, 3 attempts,
+exponential-jitter backoff. 4xx other than 429 fails fast.
+
+**Mapped market families.** 1X2 full + per-half, double chance full +
+per-half, goals over/under (full + per-half, Asian lines, per-team),
+GG/NG (full + per-half), multigoal (full + per-half + per-team), exact
+score, HT/FT, corner 1X2 (full + 1T), corner handicap (full + 1T),
+combos 1X2+U/O and BTTS+U/O, halves over/under. Anything not covered
+is counted in `SisalScrapeResult.unmapped_markets` and logged once per
+run at INFO.
+
+**Known product gaps at Sisal** (spike 2026-04-21, unchanged): prematch
+corner totals, corner per team, corner combos, cards, shots, shots on
+target. Closing these needs a second bookmaker; do not build parsers
+for them in this scraper.
+
+**Team canonicalization.** Names from `firstCompetitor.description` /
+`secondCompetitor.description` flow through
+`superbrain.core.teams.canonicalize_team(name, Bookmaker.SISAL)`.
+`match_id` = `stable_match_id(home_canonical, away_canonical, kickoff)`
+so Sisal matches join cleanly against Goldbet / Eurobet / historicals.
+
+**Idempotency.** Re-running `scrape(lake, run_id=X, captured_at=Y)`
+with the same `(X, Y)` produces zero new rows: `Lake.ingest_odds`
+dedupes on `OddsSnapshot.natural_key`, which folds
+`(bookmaker, bookmaker_event_id, market, selection, frozen params,
+captured_at, run_id)` into a stable hash. Verified by
+`test_idempotent_second_scrape_emits_zero_new_rows`.
+
+**Failure semantics.** `scrape()` never raises. A failed league emits
+`events:<league>:<error>` to `SisalScrapeResult.errors`, sets status
+to `partial`, and lets the other leagues continue. A failed event
+emits `event_markets:<event_key>:<error>` and drops only that event's
+rows. Only "zero rows written" sets status to `failed`.
+
+**Fixture budget.** Test fixtures in
+`tests/fixtures/bookmakers/sisal/` are compact (`separators=(",",":")`,
+no `clusterMenu`, trimmed `scommessaMap` / `infoAggiuntivaMap`) and
+each stay under 50 KB. `scripts/build_sisal_fixtures.py` regenerates
+them from spike payloads. See `test_scraper.test_fixtures_are_under_50kb`
+for the guard.
+
+**Live smoke.**
+`SUPERBRAIN_LIVE_TESTS=1 uv run pytest tests/scrapers/bookmakers/sisal/test_live.py`
+hits the real API (Serie A only). CI and default `pytest -q` skip it.
+
+---
+
 ## Gotchas
 
 *Add new gotchas here whenever you debug something that cost you more than 10 minutes.*
 
+- 2026-04-21 — **Sisal needs a browser User-Agent.** The spike ran with
+  `superbrain-spike/0.1` and got HTTP 200s; by the time we built the
+  production client, Akamai Bot Manager on `betting.sisal.it` started
+  **silently timing out** any request whose `User-Agent` does not look
+  like a mainstream browser. No 403 / 429 — just a dangling TLS
+  connection. The default headers in `SisalClient` therefore pose as
+  Chrome/macOS. Revisit this if request volume ever triggers a visible
+  challenge (`_abck` gets a negative sensor value) and we need to
+  persist cookies or rotate UAs.
+- 2026-04-21 — **Sisal `descrizione`, not `descrizioneScommessa`**, is
+  the market name the API publishes at event-detail level. The
+  `esitoList` on each market entry is keyed by `codiceEsito`, and the
+  selection label (`1`, `X`, `OVER`, `GOL`, `1+O`, …) lives in the
+  matching `infoAggiuntivaMap` entry. Parse from those two together,
+  not from `scommessaMap` alone.
+- 2026-04-21 — **Sisal encodes `quota` as decimal-odds × 100 integer**
+  (e.g. `173` → `1.73`), while `payout` carries the same number as a
+  float. Prefer `payout`, fall back to `quota / 100` when missing.
+- 2026-04-21 — **`soglia` is overloaded** on Sisal markets: threshold
+  for over/under, `"1"` / `"2"` for team side on SQUADRA markets,
+  `"1"` / `"2"` for half on MULTIGOAL TEMPO markets. Interpret per
+  market family, not globally.
+- 2026-04-21 — **Sisal `shortDescription` encodes the half** (`"1 T"`,
+  `"TEMPO 1"`, `"T 1"`, `"1T"`) for per-half markets. Use a regex fold
+  rather than exact matches; the SPA is inconsistent.
 - 2026-04-21 — **FBref is dead.** `soccerdata`'s FBref backend broke when the site closed. Any scraper that imports `soccerdata.FBref` must be gated behind a live-check.
 - 2026-04-21 — **The old repo's DuckDB schema is not portable.** Three separate SQLite files (`historical.db`, `betting_odds.db`, `simulations.db`) with overlapping keys. The migration script normalizes teams and drops one-off schema tables. Do not copy the old schema into the new lake verbatim.
 - 2026-04-21 — **GitHub Actions cron minimum is effectively 5 minutes** and jobs are delayed under high platform load. The "always-on" piece must live on Fly.
