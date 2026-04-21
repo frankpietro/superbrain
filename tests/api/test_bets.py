@@ -25,5 +25,3 @@ def test_markets_lists_every_registered_market(client: TestClient) -> None:
     for row in body["items"]:
         assert isinstance(row["param_keys"], list)
         assert isinstance(row["selections"], list)
-
-

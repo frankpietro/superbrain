@@ -198,9 +198,7 @@ def test_match_stats_endpoint_returns_both_teams(client: TestClient, lake: Lake)
     assert body["away"]["xg"] == 0.9
 
 
-def test_match_stats_returns_null_sides_when_no_stats_yet(
-    client: TestClient, lake: Lake
-) -> None:
+def test_match_stats_returns_null_sides_when_no_stats_yet(client: TestClient, lake: Lake) -> None:
     _seed_three_matches(lake)
     target = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
     resp = client.get(f"/matches/{target}/stats")

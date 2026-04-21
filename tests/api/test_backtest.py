@@ -166,9 +166,7 @@ def test_backtest_on_empty_lake_returns_zero_bets(client: TestClient) -> None:
     assert body["summary"]["hit_rate"] == 0.0
 
 
-def test_backtest_on_seeded_lake_returns_wellformed_report(
-    client: TestClient, lake: Lake
-) -> None:
+def test_backtest_on_seeded_lake_returns_wellformed_report(client: TestClient, lake: Lake) -> None:
     matches = _seed_backtest_lake(lake)
     resp = client.post(
         "/backtest/run",
