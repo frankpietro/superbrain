@@ -20,6 +20,7 @@ from superbrain.api.logging_config import configure_logging
 from superbrain.api.middleware import RequestContextMiddleware
 from superbrain.api.routers import backtest as backtest_router
 from superbrain.api.routers import bets as bets_router
+from superbrain.api.routers import data as data_router
 from superbrain.api.routers import health as health_router
 from superbrain.api.routers import matches as matches_router
 from superbrain.api.routers import odds as odds_router
@@ -73,6 +74,7 @@ def create_app(settings: Settings | None = None, *, lake: Lake | None = None) ->
     app.include_router(bets_router.router)
     app.include_router(backtest_router.router)
     app.include_router(trends_router.router)
+    app.include_router(data_router.router)
 
     _install_exception_handler(app)
     return app

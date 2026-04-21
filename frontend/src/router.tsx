@@ -13,6 +13,7 @@ import { BetsRecentPage } from "@/routes/bets-recent";
 import { ValueBetsPage } from "@/routes/value-bets";
 import { BacktestPage } from "@/routes/backtest";
 import { TrendsPage } from "@/routes/trends";
+import { DataPage } from "@/routes/data";
 import { SettingsPage } from "@/routes/settings";
 
 const rootRoute = createRootRoute({
@@ -73,6 +74,12 @@ const trendsRoute = createRoute({
   component: TrendsPage,
 });
 
+const dataRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/data",
+  component: DataPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/settings",
@@ -89,6 +96,7 @@ const routeTree = rootRoute.addChildren([
     valueBetsRoute,
     backtestRoute,
     trendsRoute,
+    dataRoute,
     settingsRoute,
   ]),
 ]);

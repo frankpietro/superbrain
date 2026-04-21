@@ -1,6 +1,7 @@
 import { z, type ZodType } from "zod";
 import {
   backtestRunResponseSchema,
+  dataOverviewResponse,
   healthResponse,
   matchesResponse,
   matchSchema,
@@ -179,4 +180,5 @@ export const api = {
     min_history_matches?: number;
     n_clusters?: number;
   }) => apiFetch("/backtest/run", backtestRunResponseSchema, { method: "POST", body }),
+  dataOverview: () => apiFetch("/data/overview", dataOverviewResponse),
 };

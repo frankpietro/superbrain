@@ -369,3 +369,42 @@ class BacktestRunResponse(BaseModel):
     fixtures_considered: int
     summary: BacktestSummary
     bets: list[BacktestBetRow]
+
+
+class DataColumn(BaseModel):
+    """One column of a lake table: physical name + polars dtype string."""
+
+    name: str
+    dtype: str
+
+
+class DataPartition(BaseModel):
+    """Row count for a single hive-partition combination."""
+
+    values: dict[str, str]
+    rows: int
+
+
+class DataTableOverview(BaseModel):
+    """Per-table slice of ``GET /data/overview``.
+
+    Samples are stringified so the SPA can render them without a per-column
+    type adapter — every value arrives as ``str | null``.
+    """
+
+    name: str
+    root: str
+    partition_keys: list[str]
+    exists: bool
+    total_rows: int
+    columns: list[DataColumn]
+    partitions: list[DataPartition]
+    samples: list[dict[str, str | None]]
+
+
+class DataOverviewResponse(BaseModel):
+    """Shape returned by ``GET /data/overview``."""
+
+    generated_at: datetime
+    lake_root: str
+    tables: list[DataTableOverview]
