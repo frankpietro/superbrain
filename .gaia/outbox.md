@@ -76,3 +76,14 @@ title: react-plotly.js: wrapper must have concrete dimensions
 ---
 
 When using react-plotly.js with useResizeHandler and style={{ width: '100%', height: '100%' }} on the inner <Plot>, the wrapper div MUST have concrete width/height. A bare <div> (no className, no inline size) collapses and Plotly's 100% has nothing to resolve against, so it falls back to its default autosize (~450×700 px) and overflows the parent slot — visibly leaking y-axis tick labels across surrounding UI. Proposed Gaia reference pattern: a short entry under reference/patterns/frontend-plotly-sizing.md recommending that any shared Chart/Plot wrapper default its outermost div to h-full w-full (or equivalent) and document the failure mode. Caught in superbrain's scrapers page; see docs/knowledge.md Gotchas (2026-04-21) and fix/scraper-card-chart-overflow.
+
+---
+id: 2026-04-21-06
+tier: reference
+target: reference/patterns/radix-multiselect.md
+date: 2026-04-21
+status: pending
+title: Multi-select dropdown: stop Radix closing on every click
+---
+
+Radix DropdownMenuCheckboxItem closes the menu on select by default; for a multi-select UX callers want the menu to stay open across several toggles. The clean fix is to bake `onSelect: preventDefault` into the shadcn wrapper primitive itself, keeping callers terse. Worth a pattern snippet. See superbrain PR #34 and frontend/src/components/ui/dropdown-menu.tsx.

@@ -1033,6 +1033,19 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 
 *Add new gotchas here whenever you debug something that cost you more than 10 minutes.*
 
+- 2026-04-21 — **GENERAL: Radix `DropdownMenuCheckboxItem` closes
+  the menu on select by default.** For a multi-select dropdown that
+  is the wrong UX — the user wants to toggle several items in a row
+  without reopening the menu after each click. Fix once in the UI
+  primitive (`frontend/src/components/ui/dropdown-menu.tsx`) by
+  calling `event.preventDefault()` inside `onSelect`, not in every
+  caller. Callers can still override by passing their own `onSelect`.
+  Dismissal is still available via Escape / outside click. Tests of
+  pages with these dropdowns must either explicitly press Escape
+  before asserting against the page behind the menu, or scope their
+  queries to the portaled menu itself — Radix shields the rest of
+  the DOM with `aria-hidden` while a menu is open, so role queries
+  on the underlying page silently fail. See PR #34.
 - 2026-04-21 — **Sisal needs a browser User-Agent.** The spike ran with
   `superbrain-spike/0.1` and got HTTP 200s; by the time we built the
   production client, Akamai Bot Manager on `betting.sisal.it` started

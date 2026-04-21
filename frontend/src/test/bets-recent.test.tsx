@@ -116,9 +116,11 @@ describe("BetsRecentPage", () => {
 
     await screen.findByText("Match result (1X2)");
     await user.click(screen.getByRole("button", { name: /all bookmakers/i }));
+    // Multi-select dropdown stays open across consecutive checks.
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "Sisal" }));
-    await user.click(screen.getByRole("button", { name: /sisal/i }));
     await user.click(await screen.findByRole("menuitemcheckbox", { name: "Goldbet" }));
+    // Dismiss the menu so Radix stops shielding the rest of the page.
+    await user.keyboard("{Escape}");
 
     const table = screen.getByRole("table");
     const tbody = table.querySelector("tbody")!;
