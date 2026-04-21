@@ -87,7 +87,8 @@ class TestParseEventMarkets:
         ft = [
             s
             for s in snaps
-            if s.market is Market.MATCH_1X2 and "half" not in s.market_params
+            if s.market is Market.MATCH_1X2
+            and "half" not in s.market_params
             and "handicap" not in s.market_params
         ]
         selections = {s.selection for s in ft}
@@ -111,14 +112,10 @@ class TestParseEventMarkets:
         assert 2.5 in thresholds
         # both OVER and UNDER surfaces for at least one threshold
         for thr in thresholds:
-            sides = {
-                s.selection for s in ou if s.market_params["threshold"] == thr
-            }
+            sides = {s.selection for s in ou if s.market_params["threshold"] == thr}
             assert sides <= {"OVER", "UNDER"}
 
-    def test_btts_mapped_yes_no(
-        self, event_payload: dict[str, Any], captured_at: datetime
-    ) -> None:
+    def test_btts_mapped_yes_no(self, event_payload: dict[str, Any], captured_at: datetime) -> None:
         snaps, _ = parse_event_markets(
             event_payload,
             league=League.SERIE_A,
@@ -149,9 +146,7 @@ class TestParseEventMarkets:
             captured_at=captured_at,
             run_id="r",
         )
-        hcp = [
-            s for s in snaps if s.market is Market.MATCH_1X2 and "handicap" in s.market_params
-        ]
+        hcp = [s for s in snaps if s.market is Market.MATCH_1X2 and "handicap" in s.market_params]
         assert hcp
         for s in hcp:
             assert isinstance(s.market_params["handicap"], float)

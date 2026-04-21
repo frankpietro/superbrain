@@ -135,9 +135,7 @@ async def discover_events(
             if per_meeting_errors is not None:
                 per_meeting_errors.append(f"{league.value}:{e}")
             continue
-        for ref in _parse_meeting(
-            payload, league=league, meeting_slug=meeting_slug
-        ):
+        for ref in _parse_meeting(payload, league=league, meeting_slug=meeting_slug):
             per_league[league][(ref.program_code, ref.event_code)] = ref
 
     return {league: list(by_key.values()) for league, by_key in per_league.items()}
@@ -219,9 +217,7 @@ def _event_ref_from_tile(
         if ei.get("meetingCode") is not None
         else fallback_meeting_code
     )
-    meeting_desc = str(
-        ei.get("meetingDescription") or fallback_meeting_desc or ""
-    )
+    meeting_desc = str(ei.get("meetingDescription") or fallback_meeting_desc or "")
     meeting_slug = _meeting_slug_from_breadcrumb(item) or (
         EUROBET_LEAGUE_MEETINGS.get(league) if league else None
     )
@@ -250,13 +246,8 @@ def _event_ref_from_tile(
     else:
         betradar_id = str(betradar)
 
-    resolved_league = (
-        league
-        or (
-            EUROBET_MEETING_CODES.get(meeting_code)
-            if meeting_code is not None
-            else None
-        )
+    resolved_league = league or (
+        EUROBET_MEETING_CODES.get(meeting_code) if meeting_code is not None else None
     )
 
     return EurobetEventRef(

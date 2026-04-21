@@ -131,9 +131,7 @@ class ParsedEvent:
     season: str
 
 
-def parse_event_meta(
-    event_info: dict[str, Any], league: League | None
-) -> ParsedEvent | None:
+def parse_event_meta(event_info: dict[str, Any], league: League | None) -> ParsedEvent | None:
     """Extract the event metadata needed to assemble ``OddsSnapshot`` rows.
 
     :param event_info: the ``eventInfo`` sub-object from the Eurobet
@@ -760,9 +758,7 @@ def _emit_multigol(
     team_side: str | None,
 ) -> list[OddsSnapshot]:
     market = Market.MULTIGOL if team_side is None else Market.MULTIGOL_TEAM
-    team_name = (
-        event.home_team if team_side == "home" else event.away_team
-    ) if team_side else None
+    team_name = (event.home_team if team_side == "home" else event.away_team) if team_side else None
     out: list[OddsSnapshot] = []
     for og in bg.get("oddGroupList") or []:
         if not isinstance(og, dict):
@@ -822,7 +818,7 @@ def _emit_goals_team_yn(
     source: str,
     team_side: str,
 ) -> list[OddsSnapshot]:
-    """"SEGNA GOAL SQUADRA" is equivalent to team-U/O at threshold 0.5."""
+    """ "SEGNA GOAL SQUADRA" is equivalent to team-U/O at threshold 0.5."""
     mapping = {"SI": "OVER", "YES": "OVER", "NO": "UNDER"}
     team_name = event.home_team if team_side == "home" else event.away_team
     out: list[OddsSnapshot] = []
@@ -1069,9 +1065,7 @@ def _payout(odd: dict[str, Any]) -> float | None:
     return decimal
 
 
-def _threshold_from_odd(
-    odd: dict[str, Any], og: dict[str, Any]
-) -> float | None:
+def _threshold_from_odd(odd: dict[str, Any], og: dict[str, Any]) -> float | None:
     add_info = odd.get("additionalInfo")
     if isinstance(add_info, list) and add_info:
         try:

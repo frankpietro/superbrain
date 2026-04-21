@@ -67,9 +67,7 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_MIN_INTERVAL_S = 1.0
 
 _RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 502, 503, 504})
-_BUILD_ID_RE = re.compile(
-    r'"buildId"\s*:\s*"([^"]+)"'
-)
+_BUILD_ID_RE = re.compile(r'"buildId"\s*:\s*"([^"]+)"')
 
 
 class EurobetError(RuntimeError):
@@ -213,9 +211,7 @@ class EurobetClient:
             raise EurobetError("could not find buildId in landing HTML", url=url)
         return m.group(1)
 
-    async def fetch_top_disciplines(
-        self, discipline_alias: str = "calcio"
-    ) -> dict[str, Any]:
+    async def fetch_top_disciplines(self, discipline_alias: str = "calcio") -> dict[str, Any]:
         """Fetch the homepage ``top-disciplines`` carousel feed.
 
         :param discipline_alias: Eurobet discipline slug (default: calcio).
@@ -227,9 +223,7 @@ class EurobetClient:
         )
         return await self._get_httpx_json(url)
 
-    async def fetch_sport_list(
-        self, discipline_alias: str = "calcio"
-    ) -> dict[str, Any]:
+    async def fetch_sport_list(self, discipline_alias: str = "calcio") -> dict[str, Any]:
         """Fetch the authoritative meeting tree for the discipline.
 
         :param discipline_alias: Eurobet discipline slug (default: calcio).
@@ -294,17 +288,10 @@ class EurobetClient:
         :param live: include live markets
         :return: parsed JSON envelope (``code``/``description``/``result``)
         """
-        path = (
-            f"/detail-service/sport-schedule/services/meeting/"
-            f"{discipline_alias}/{meeting_slug}"
-        )
+        path = f"/detail-service/sport-schedule/services/meeting/{discipline_alias}/{meeting_slug}"
         params = {"prematch": int(prematch), "live": int(live)}
-        referer = (
-            f"{EUROBET_BASE}/it/scommesse/{discipline_alias}/{meeting_slug}"
-        )
-        return await self._get_cffi_json(
-            EUROBET_BASE + path, params=params, referer=referer
-        )
+        referer = f"{EUROBET_BASE}/it/scommesse/{discipline_alias}/{meeting_slug}"
+        return await self._get_cffi_json(EUROBET_BASE + path, params=params, referer=referer)
 
     async def fetch_event(
         self,
@@ -338,13 +325,8 @@ class EurobetClient:
         if group_alias:
             path = f"{path}/{group_alias}"
         params = {"prematch": int(prematch), "live": int(live)}
-        referer = (
-            f"{EUROBET_BASE}/it/scommesse/{discipline_alias}/"
-            f"{meeting_slug}/{event_slug}"
-        )
-        return await self._get_cffi_json(
-            EUROBET_BASE + path, params=params, referer=referer
-        )
+        referer = f"{EUROBET_BASE}/it/scommesse/{discipline_alias}/{meeting_slug}/{event_slug}"
+        return await self._get_cffi_json(EUROBET_BASE + path, params=params, referer=referer)
 
     # ------------------------------------------------------------------
     # Transport internals
@@ -364,9 +346,7 @@ class EurobetClient:
                 try:
                     resp = await self._httpx.get(url, params=params)
                 except httpx.HTTPError as e:
-                    raise EurobetError(
-                        f"network error on {url}: {e}", url=url
-                    ) from e
+                    raise EurobetError(f"network error on {url}: {e}", url=url) from e
                 if resp.status_code in _RETRYABLE_STATUSES:
                     log.warning(
                         "eurobet.retryable_status",
@@ -429,9 +409,7 @@ class EurobetClient:
                 except Exception as e:  # curl_cffi raises its own types
                     if _should_retry(e):
                         raise _RetryableHTTPError(-1, url) from e
-                    raise EurobetError(
-                        f"network error on {url}: {e}", url=url
-                    ) from e
+                    raise EurobetError(f"network error on {url}: {e}", url=url) from e
                 status = int(getattr(resp, "status_code", 0))
                 if status in _RETRYABLE_STATUSES:
                     log.warning(

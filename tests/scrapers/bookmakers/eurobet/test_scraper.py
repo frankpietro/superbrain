@@ -180,10 +180,7 @@ async def test_scrape_is_idempotent_on_rerun(
     assert result2.ingest_report is not None
     assert result2.ingest_report.rows_received == result1.ingest_report.rows_received  # type: ignore[union-attr]
     assert result2.rows_written == 0
-    assert (
-        result2.ingest_report.rows_skipped_duplicate
-        == result2.ingest_report.rows_received
-    )
+    assert result2.ingest_report.rows_skipped_duplicate == result2.ingest_report.rows_received
 
 
 @respx.mock
@@ -211,9 +208,7 @@ async def test_scrape_logs_scrape_run(
     assert parquet_files, "no scrape_runs partition was materialized"
     import polars as pl  # noqa: PLC0415 - local import keeps tests cheap
 
-    frame = pl.concat(
-        [pl.read_parquet(p) for p in parquet_files], how="diagonal_relaxed"
-    )
+    frame = pl.concat([pl.read_parquet(p) for p in parquet_files], how="diagonal_relaxed")
     assert "abc123" in frame["run_id"].to_list()
     assert Bookmaker.EUROBET.value in frame["bookmaker"].to_list()
     assert result.status in {"success", "partial"}
@@ -236,9 +231,7 @@ async def test_scrape_survives_top_disciplines_failure(
             "/services/meeting/": meeting_payload,
         }
     )
-    result = await scrape(
-        lake, leagues=[League.SERIE_A], event_concurrency=1, run_id="r3"
-    )
+    result = await scrape(lake, leagues=[League.SERIE_A], event_concurrency=1, run_id="r3")
     # Even with the homepage feed dead, the meeting feed still produces rows.
     assert result.rows_written > 0
     assert result.status == "partial"

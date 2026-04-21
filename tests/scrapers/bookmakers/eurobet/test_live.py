@@ -28,9 +28,7 @@ LIVE_ENABLED = os.environ.get("SUPERBRAIN_LIVE_TESTS") == "1"
 
 
 pytestmark = [
-    pytest.mark.skipif(
-        not LIVE_ENABLED, reason="set SUPERBRAIN_LIVE_TESTS=1 to enable"
-    ),
+    pytest.mark.skipif(not LIVE_ENABLED, reason="set SUPERBRAIN_LIVE_TESTS=1 to enable"),
     pytest.mark.integration,
     pytest.mark.slow,
 ]
@@ -40,9 +38,7 @@ pytestmark = [
 async def test_live_serie_a_scrape(tmp_path: Path) -> None:
     lake = Lake(root=tmp_path / "lake")
     lake.ensure_schema()
-    result = await scrape(
-        lake, leagues=[League.SERIE_A], event_concurrency=2
-    )
+    result = await scrape(lake, leagues=[League.SERIE_A], event_concurrency=2)
     # The season is live in April 2026; Eurobet always lists at least one
     # Serie A fixture in the prematch window.
     assert result.per_league_events.get("serie_a", 0) > 0

@@ -112,9 +112,7 @@ async def test_fetch_top_disciplines_url_and_headers() -> None:
         f"{EUROBET_BASE}/prematch-homepage-service/api/v2/sport-schedule"
         f"/services/top-disciplines/1/calcio"
     )
-    route = respx.get(url).mock(
-        return_value=httpx.Response(200, json={"code": 1, "result": []})
-    )
+    route = respx.get(url).mock(return_value=httpx.Response(200, json={"code": 1, "result": []}))
     async with EurobetClient(min_interval_s=0.0) as client:
         payload = await client.fetch_top_disciplines()
     assert payload == {"code": 1, "result": []}
@@ -126,13 +124,8 @@ async def test_fetch_top_disciplines_url_and_headers() -> None:
 
 @respx.mock
 async def test_fetch_sport_list_url() -> None:
-    url = (
-        f"{EUROBET_BASE}/prematch-menu-service/api/v2/sport-schedule"
-        f"/services/sport-list/calcio"
-    )
-    route = respx.get(url).mock(
-        return_value=httpx.Response(200, json={"code": 1, "result": {}})
-    )
+    url = f"{EUROBET_BASE}/prematch-menu-service/api/v2/sport-schedule/services/sport-list/calcio"
+    route = respx.get(url).mock(return_value=httpx.Response(200, json={"code": 1, "result": {}}))
     async with EurobetClient(min_interval_s=0.0) as client:
         payload = await client.fetch_sport_list()
     assert payload == {"code": 1, "result": {}}
@@ -141,12 +134,8 @@ async def test_fetch_sport_list_url() -> None:
 
 @respx.mock
 async def test_fetch_meeting_next_url() -> None:
-    url = (
-        f"{EUROBET_BASE}/_next/data/abc123/it/scommesse/calcio/it-serie-a.json"
-    )
-    route = respx.get(url).mock(
-        return_value=httpx.Response(200, json={"pageProps": {}})
-    )
+    url = f"{EUROBET_BASE}/_next/data/abc123/it/scommesse/calcio/it-serie-a.json"
+    route = respx.get(url).mock(return_value=httpx.Response(200, json={"pageProps": {}}))
     async with EurobetClient(min_interval_s=0.0) as client:
         payload = await client.fetch_meeting_next(
             build_id="abc123",
@@ -160,10 +149,10 @@ async def test_fetch_meeting_next_url() -> None:
 @respx.mock
 async def test_fetch_landing_build_id_extracts_from_next_data() -> None:
     html = (
-        '<html><body>'
+        "<html><body>"
         '<script id="__NEXT_DATA__" type="application/json">'
         '{"buildId":"deadbeef","props":{}}</script>'
-        '</body></html>'
+        "</body></html>"
     )
     respx.get(f"{EUROBET_BASE}/it/scommesse/calcio").mock(
         return_value=httpx.Response(200, text=html)
@@ -234,8 +223,7 @@ async def test_fetch_event_routes_through_cffi_with_tenant_headers(
     assert len(sess.requests) == 1
     req = sess.requests[0]
     assert (
-        req["url"]
-        == f"{EUROBET_BASE}/detail-service/sport-schedule/services/event/"
+        req["url"] == f"{EUROBET_BASE}/detail-service/sport-schedule/services/event/"
         f"calcio/it-serie-a/napoli-cremonese-202604242045"
     )
     assert req["impersonate"] == "chrome124"
@@ -268,9 +256,7 @@ async def test_fetch_meeting_uses_cffi(cffi_session_factory) -> None:
 
 
 async def test_cffi_app_level_error_raises(cffi_session_factory) -> None:
-    cffi_session_factory(
-        [_ok({"code": -99, "description": "validation error", "result": []})]
-    )
+    cffi_session_factory([_ok({"code": -99, "description": "validation error", "result": []})])
     async with EurobetClient(min_interval_s=0.0) as client:
         with pytest.raises(EurobetError) as exc:
             await client.fetch_event(
@@ -282,9 +268,7 @@ async def test_cffi_app_level_error_raises(cffi_session_factory) -> None:
 
 
 async def test_cffi_retries_on_503(cffi_session_factory) -> None:
-    cffi_session_factory(
-        [_err(503, "busy"), _ok({"code": 1, "result": {"betGroupList": []}})]
-    )
+    cffi_session_factory([_err(503, "busy"), _ok({"code": 1, "result": {"betGroupList": []}})])
     async with EurobetClient(min_interval_s=0.0, max_attempts=3) as client:
         payload = await client.fetch_event(
             discipline_alias="calcio",
