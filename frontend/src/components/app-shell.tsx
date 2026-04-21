@@ -52,7 +52,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 flex-none border-r border-border bg-card/50 p-4 md:flex md:flex-col">
+      <aside className="sticky top-0 hidden h-screen w-60 flex-none self-start overflow-y-auto border-r border-border bg-card/50 p-4 md:flex md:flex-col">
         <div className="mb-6 flex items-center gap-2 px-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Brain className="h-4 w-4" aria-hidden="true" />
