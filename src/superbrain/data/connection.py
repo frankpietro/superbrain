@@ -39,6 +39,7 @@ from superbrain.core.models import (
     ScrapeRun,
     TeamElo,
     TeamMatchStats,
+    compute_match_id,
 )
 from superbrain.data.migrations import MIGRATIONS
 from superbrain.data.paths import LakeLayout, timestamped_filename
@@ -195,11 +196,12 @@ class Lake:
                 rejected_reasons=report.rejected_reasons,
                 partitions_written=[*report.partitions_written, str(partition)],
             )
+
+        self._promote_fixtures_from_snapshots(snapshots)
+
         return report
 
-    def ingest_matches(
-        self, matches: list[Match], *, provenance: IngestProvenance
-    ) -> IngestReport:
+    def ingest_matches(self, matches: list[Match], *, provenance: IngestProvenance) -> IngestReport:
         """Write a batch of validated ``Match`` rows and refresh the index.
 
         :param matches: already-validated matches
@@ -212,17 +214,13 @@ class Lake:
 
         rows = [m.model_dump() for m in matches]
         for r in rows:
-            r["league"] = (
-                r["league"].value if hasattr(r["league"], "value") else r["league"]
-            )
+            r["league"] = r["league"].value if hasattr(r["league"], "value") else r["league"]
         frame = pl.DataFrame(rows)
         frame = align_to_schema(frame, MATCH_SCHEMA)
 
         report = IngestReport(rows_received=len(rows), rows_written=0)
         for (league, season), group in _group_by(frame, ("league", "season")):
-            partition = self.layout.matches_partition(
-                league=str(league), season=str(season)
-            )
+            partition = self.layout.matches_partition(league=str(league), season=str(season))
             written, skipped = self._append_parquet(
                 partition=partition,
                 frame=group,
@@ -254,9 +252,7 @@ class Lake:
 
         rows = [s.model_dump() for s in stats]
         for r in rows:
-            r["league"] = (
-                r["league"].value if hasattr(r["league"], "value") else r["league"]
-            )
+            r["league"] = r["league"].value if hasattr(r["league"], "value") else r["league"]
         frame = pl.DataFrame(rows)
         frame = align_to_schema(frame, TEAM_MATCH_STATS_SCHEMA)
 
@@ -280,9 +276,7 @@ class Lake:
             )
         return report
 
-    def ingest_team_elo(
-        self, elos: list[TeamElo], *, provenance: IngestProvenance
-    ) -> IngestReport:
+    def ingest_team_elo(self, elos: list[TeamElo], *, provenance: IngestProvenance) -> IngestReport:
         """Write a batch of ClubElo snapshots.
 
         Dedupe key is ``(team, snapshot_date)``; partitioned by the month of
@@ -329,9 +323,7 @@ class Lake:
         :return: parquet path that was appended to
         """
         payload = run.model_dump()
-        payload["bookmaker"] = (
-            run.bookmaker.value if run.bookmaker is not None else None
-        )
+        payload["bookmaker"] = run.bookmaker.value if run.bookmaker is not None else None
         frame = pl.DataFrame([payload])
         frame = align_to_schema(frame, SCRAPE_RUNS_SCHEMA)
 
@@ -441,9 +433,7 @@ class Lake:
             "home_team": snapshot.home_team,
             "away_team": snapshot.away_team,
             "market": snapshot.market.value,
-            "market_params_json": json.dumps(
-                snapshot.market_params, sort_keys=True, default=str
-            ),
+            "market_params_json": json.dumps(snapshot.market_params, sort_keys=True, default=str),
             "market_params_hash": snapshot.params_hash(),
             "selection": snapshot.selection,
             "payout": snapshot.payout,
@@ -510,6 +500,95 @@ class Lake:
         frame = align_to_schema(frame, schema)
         frame.write_parquet(target)
         return frame.height, skipped
+
+    def _promote_fixtures_from_snapshots(self, snapshots: list[OddsSnapshot]) -> None:
+        """Upsert a ``matches`` row per unique fixture seen in ``snapshots``.
+
+        Bookmaker scrapers only call :meth:`ingest_odds`, which would leave
+        the ``matches`` table empty for upcoming fixtures. This helper
+        derives ``Match`` objects from the snapshot batch and writes the
+        ones whose ``match_id`` is not already in the lake, so the
+        ``/matches`` API surface reflects anything we're pricing.
+
+        Historical backfill remains authoritative: since dedupe on
+        ``match_id`` is first-writer-wins, odds-promoted rows only fill
+        genuine gaps. If the backfill lands first (with real scores), this
+        helper is a no-op for that fixture.
+
+        Invalid snapshots (missing ``match_id`` / ``league``, or a
+        ``match_id`` that disagrees with the canonical hash) are skipped
+        silently — they are already logged elsewhere as odds-ingest
+        anomalies.
+        """
+        if not snapshots:
+            return
+
+        now = datetime.now(tz=timezone.utc)
+        candidates: dict[str, Match] = {}
+        for snap in snapshots:
+            if snap.match_id is None or snap.league is None:
+                continue
+            home = snap.home_team.strip()
+            away = snap.away_team.strip()
+            if not home or not away:
+                continue
+            expected = compute_match_id(home, away, snap.match_date, snap.league)
+            if snap.match_id != expected:
+                # Canonicalization drift (team alias mismatch across
+                # bookmakers). Leave it to the scraper-level repair path.
+                continue
+            if snap.match_id in candidates:
+                continue
+            candidates[snap.match_id] = Match(
+                match_id=snap.match_id,
+                league=snap.league,
+                season=snap.season,
+                match_date=snap.match_date,
+                home_team=home,
+                away_team=away,
+                home_goals=None,
+                away_goals=None,
+                source=f"odds:{snap.bookmaker.value}",
+                ingested_at=now,
+            )
+
+        if not candidates:
+            return
+
+        existing_ids = self._existing_match_ids(
+            pairs=[(m.league.value, m.season) for m in candidates.values()]
+        )
+        new_matches = [m for m in candidates.values() if m.match_id not in existing_ids]
+        if not new_matches:
+            return
+
+        self.ingest_matches(
+            new_matches,
+            provenance=IngestProvenance(
+                source="odds-promotion",
+                run_id=f"odds-promotion-{now.strftime('%Y%m%dT%H%M%S%fZ')}",
+                actor="lake",
+                captured_at=now,
+            ),
+        )
+
+    def _existing_match_ids(self, *, pairs: list[tuple[str, str]]) -> set[str]:
+        """Return the set of ``match_id`` values already in the given partitions.
+
+        :param pairs: ``(league, season)`` tuples to scan
+        :return: every ``match_id`` found in the union of those partitions
+        """
+        if not pairs:
+            return set()
+        seen: set[str] = set()
+        for league, season in set(pairs):
+            partition = self.layout.matches_partition(league=league, season=season)
+            if not partition.exists():
+                continue
+            for parquet in partition.glob("*.parquet"):
+                df = pl.read_parquet(parquet, columns=["match_id"])
+                seen.update(df["match_id"].to_list())
+        return seen
 
     def _refresh_match_index(self) -> None:
         target = self.layout.matches_root / "match_index.parquet"

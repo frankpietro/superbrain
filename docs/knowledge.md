@@ -185,6 +185,39 @@ rejected, re-run dedupes 100 %. Season code normalized from `"2526"` to
 `"2025-26"`; team names canonicalized on the way in (`Siviglia→Sevilla`
 etc.).
 
+**Fixture promotion from odds (2026-04-21).** `Lake.ingest_odds` now
+also upserts a `Match` row per unique `match_id` it sees. Bookmaker
+scrapers don't call `ingest_matches` directly, so without this hook
+the `matches` table stays empty for upcoming fixtures even though the
+odds table is fully populated (denormalised `match_id / league /
+match_date / home_team / away_team` columns) — the Matches SPA page
+would then show zero rows for next weekend's games. Promotion
+semantics:
+
+- First-writer-wins on `match_id`, same as any other `ingest_matches`
+  call. Historical backfill therefore remains authoritative: if
+  football-data / Understat has already landed a match with real
+  scores, an odds-promoted `home_goals=None / away_goals=None`
+  placeholder is silently skipped.
+- Converse: if odds land first (the common case for upcoming
+  fixtures) and historical backfill later runs against a settled
+  match, the placeholder **stays** — the dedupe blocks the
+  authoritative rewrite. Acceptable for now; a proper upsert that
+  newer-data-wins is tracked in *Deferred / open*.
+- Rows with `match_id=None`, `league=None`, or a `match_id` that
+  disagrees with `compute_match_id(home, away, date, league)` are
+  skipped. The hash mismatch case catches team-alias drift between
+  bookmakers — leave repair to the canonicalization layer, don't
+  paper over it in the matches table.
+- Source marker on promoted rows: `odds:<bookmaker>` so future audits
+  can tell fixture origin at a glance.
+
+One-off backfill for lakes seeded before this change:
+`uv run python scripts/promote_fixtures_from_odds.py [--dry-run]`
+reads every odds partition, derives the gap, and fills it. Idempotent
+(the same dedupe-on-`match_id` path). On 2026-04-21 this rescued
+57 upcoming fixtures across the top-5 leagues from 17,933 odds rows.
+
 ### Historical data pipeline (phase 2, 2026-04-21)
 
 Lives under `src/superbrain/scrapers/historical/`. Backfills matches,
@@ -873,6 +906,18 @@ Items that will be decided as phases land:
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
 - **CI `gaia doctor` job** — disabled in CI (2026-04-21) because Gaia is a private repo and the job can't clone it without a PAT. Re-enable by adding a `GAIA_READ_PAT` repository secret and restoring the `gaia` job in `.github/workflows/ci.yml`. Local coverage via the pre-push hook and the Cursor session-start hook is adequate in the interim.
+- **Matches upsert (newer-data-wins) semantics** — 2026-04-21: with
+  the new odds→matches promotion, an upcoming fixture lands with
+  `home_goals=None`. When the historical backfill later processes
+  that fixture (now with a settled score), the current
+  first-writer-wins dedupe blocks the rewrite and the placeholder
+  stays. Harmless for phases 4a/4b (pricing reads the `odds` table
+  directly, not `matches`) and for the SPA (`home_goals` is shown
+  only when populated). Fix when needed: tag odds-promoted rows
+  with `is_placeholder=true`, and extend `_append_parquet`'s dedupe
+  to overwrite placeholders when an authoritative row with the same
+  `match_id` arrives. Tracked so the backtest / Bet Log screens
+  don't silently miss completed scores once they wire up.
 - **SPA ↔ backend type sync** — 2026-04-21: `frontend/src/lib/types.ts` is hand-written to mirror `superbrain.core.models`. Swap to `openapi-typescript http://localhost:8100/openapi.json -o src/lib/api-types.ts` as soon as the Phase-6 FastAPI `/openapi.json` stabilises.
 - **SPA bundle splitting** — 2026-04-21: Plotly drags `dist/assets/index-*.js` to ~2 MB unminified (~645 KB gzipped). Acceptable for a 3-user internal tool. If we ever route public traffic at it, lazy-load `src/components/plot.tsx` via `React.lazy` and drop Plotly from the initial chunk.
 - **SPA value-bet and backtest screens** — 2026-04-21: ship phase 7 with empty-state UX against the Phase-6 stubs (`GET /bets/value` → `{items: []}`, `POST /backtest/run` → 501). Real wiring lands alongside the engine in phase 4b; the forms + sortable table are already in place.

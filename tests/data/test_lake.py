@@ -124,9 +124,7 @@ class TestIngestOdds:
         assert report.rows_written == 1
         assert report.rows_skipped_duplicate == 2
 
-    def test_partitioned_by_bookmaker_market_season(
-        self, lake: Lake, tmp_path: Path
-    ) -> None:
+    def test_partitioned_by_bookmaker_market_season(self, lake: Lake, tmp_path: Path) -> None:
         lake.ingest_odds(
             [
                 _snapshot(bookmaker=Bookmaker.SISAL, market=Market.CORNER_TOTAL),
@@ -222,6 +220,103 @@ class TestIngestMatchesAndStats:
         ]
         report = lake.ingest_team_match_stats(stats, provenance=_provenance())
         assert report.rows_written == 1
+
+
+class TestOddsPromotesFixtures:
+    """`ingest_odds` populates `matches` for fixtures seen only via odds.
+
+    Without this, the bookmaker scrapers (which only call ``ingest_odds``)
+    leave the matches table empty for upcoming fixtures, so the
+    ``/matches`` API shows zero rows even when the lake knows about the
+    weekend's games.
+    """
+
+    @staticmethod
+    def _snap(**overrides: Any) -> OddsSnapshot:
+        match_id = compute_match_id(
+            overrides.get("home_team", "Roma"),
+            overrides.get("away_team", "Lazio"),
+            overrides.get("match_date", date(2024, 9, 1)),
+            overrides.get("league", League.SERIE_A),
+        )
+        return _snapshot(match_id=match_id, **overrides)
+
+    def test_promotes_one_fixture_per_match_id(self, lake: Lake) -> None:
+        s1 = self._snap()
+        s2 = self._snap(
+            selection="UNDER",
+            market_params={"threshold": 10.5},
+            captured_at=datetime(2024, 9, 1, 13, tzinfo=UTC),
+        )
+        lake.ingest_odds([s1, s2], provenance=_provenance())
+
+        matches = lake.read_matches()
+        assert matches.height == 1
+        row = matches.row(0, named=True)
+        assert row["match_id"] == s1.match_id
+        assert row["home_team"] == "Roma"
+        assert row["away_team"] == "Lazio"
+        assert row["league"] == League.SERIE_A.value
+        assert row["home_goals"] is None
+        assert row["away_goals"] is None
+        assert row["source"].startswith("odds:")
+
+    def test_promotes_distinct_fixtures_separately(self, lake: Lake) -> None:
+        s1 = self._snap()
+        s2 = self._snap(
+            bookmaker_event_id="evt-2",
+            home_team="Milan",
+            away_team="Inter",
+            match_date=date(2024, 9, 2),
+        )
+        lake.ingest_odds([s1, s2], provenance=_provenance())
+        assert lake.read_matches().height == 2
+
+    def test_skips_snapshot_without_match_id(self, lake: Lake) -> None:
+        lake.ingest_odds([_snapshot(match_id=None)], provenance=_provenance())
+        assert lake.read_matches().height == 0
+
+    def test_skips_snapshot_without_league(self, lake: Lake) -> None:
+        match_id = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
+        lake.ingest_odds(
+            [_snapshot(match_id=match_id, league=None)],
+            provenance=_provenance(),
+        )
+        assert lake.read_matches().height == 0
+
+    def test_does_not_overwrite_authoritative_match(self, lake: Lake) -> None:
+        """Historical backfill lands first → odds-promotion is a no-op."""
+        match_id = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
+        authoritative = Match(
+            match_id=match_id,
+            league=League.SERIE_A,
+            season="2024-25",
+            match_date=date(2024, 9, 1),
+            home_team="Roma",
+            away_team="Lazio",
+            home_goals=2,
+            away_goals=1,
+            source="football_data",
+            ingested_at=datetime.now(tz=UTC),
+        )
+        lake.ingest_matches([authoritative], provenance=_provenance())
+
+        lake.ingest_odds([self._snap()], provenance=_provenance())
+
+        matches = lake.read_matches()
+        assert matches.height == 1
+        row = matches.row(0, named=True)
+        assert row["home_goals"] == 2
+        assert row["source"] == "football_data"
+
+    def test_idempotent_across_runs(self, lake: Lake) -> None:
+        s = self._snap()
+        lake.ingest_odds([s], provenance=_provenance())
+        lake.ingest_odds(
+            [self._snap(captured_at=datetime(2024, 9, 1, 14, tzinfo=UTC))],
+            provenance=_provenance(),
+        )
+        assert lake.read_matches().height == 1
 
 
 class TestLogScrapeRun:
