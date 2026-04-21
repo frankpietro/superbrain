@@ -123,7 +123,8 @@ Routes:
 | `/` | Dashboard: fixture / value-bet / scraper-health cards + today's matches table. |
 | `/matches` | Filterable table (league multi-select, date range, team search). |
 | `/matches/$id` | Fixture detail + odds pivot (markets × bookmakers, last-update tooltip). |
-| `/scrapers` | Per-bookmaker tiles: status, rows written, unmapped markets, rows-written history chart, trigger button. |
+| `/scrapers` | Per-bookmaker tiles (status, rows written, unmapped markets, rows-written history, trigger button) + a "Recent scraped odds" grid below: one card per `MarketCategory`, up to 6 most-recent rows across providers, 24 h window, refreshed on the same 30 s cadence. |
+| `/bets` | Recent-bets feed (index): newest-first, cursor-paginated table across providers. Filters: bookmaker multi-select (narrows client-side when >1 chosen because `GET /odds` accepts a single bookmaker), market dropdown (sections grouped by `MarketCategory`), `captured_from` (default last 24 h). |
 | `/bets/value` | Empty state until the engine ships in phase 4b; sortable table when items arrive. |
 | `/backtest` | Form → `POST /backtest/run`; 501 is caught and rendered as a friendly toast. |
 | `/settings` | Active token (masked), theme, timezone, API base URL. |
@@ -773,6 +774,20 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
   directly. The Phase 5 default is `DEFAULT_HISTORICAL_CRON =
   "0 4 * * mon-fri"` in `scheduler/config.py`. Cost us ~20 min of
   staring at failing trigger tests before spotting the off-by-one.
+- 2026-04-21 — **`/bets` is the recent-odds feed (index).** Previously
+  the sidebar only exposed `/bets/value`; now `/bets` is an index route
+  rendering a cursor-paginated table of the latest scraped odds across
+  providers, and `/bets/value` stays as its child. Sidebar restructured
+  to show a "Bets" section header with two leaves: "Recent" (`/bets`)
+  and "Value" (`/bets/value`). `/scrapers` grew a "Recent scraped odds"
+  grid below the bookmaker cards, grouped by `MarketCategory` (match
+  result / goals / corners / cards / shots / combo / halves), top-6
+  rows per category from the last 24 h, mixed across providers.
+  Client-only feature — `GET /odds` already supports
+  `captured_from` + `cursor`; no backend changes. Shared renderer in
+  `frontend/src/components/odds-rows.tsx`, market-category helpers in
+  `frontend/src/lib/markets.ts`, grouping helper (unit-tested) in
+  `frontend/src/lib/odds-group.ts`. See `feat/bets-recent-feed-*`.
 - 2026-04-21 — **GENERAL: Plotly's `useResizeHandler` needs a sized
   parent.** `react-plotly.js` with `useResizeHandler` and
   `style={{ width: "100%", height: "100%" }}` on the inner `<Plot>`

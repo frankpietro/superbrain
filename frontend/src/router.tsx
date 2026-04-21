@@ -12,6 +12,7 @@ import { DashboardPage } from "@/routes/dashboard";
 import { MatchesPage } from "@/routes/matches";
 import { MatchDetailPage } from "@/routes/match-detail";
 import { ScrapersPage } from "@/routes/scrapers";
+import { BetsRecentPage } from "@/routes/bets-recent";
 import { ValueBetsPage } from "@/routes/value-bets";
 import { BacktestPage } from "@/routes/backtest";
 import { SettingsPage } from "@/routes/settings";
@@ -74,6 +75,12 @@ const scrapersRoute = createRoute({
   component: ScrapersPage,
 });
 
+const betsIndexRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/bets",
+  component: BetsRecentPage,
+});
+
 const valueBetsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/bets/value",
@@ -99,6 +106,7 @@ const routeTree = rootRoute.addChildren([
     matchesRoute,
     matchDetailRoute,
     scrapersRoute,
+    betsIndexRoute,
     valueBetsRoute,
     backtestRoute,
     settingsRoute,

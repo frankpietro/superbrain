@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Loader2, AlertCircle, CheckCircle2, CircleDot } from "lucide-react";
 import { api } from "@/lib/api";
@@ -9,8 +10,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { ErrorBanner } from "@/components/error-banner";
 import { Chart } from "@/components/plot";
+import { OddsRowsTable } from "@/components/odds-rows";
 import { toast } from "@/components/ui/toaster";
 import { fmtTime } from "@/lib/format";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  useMarketRegistry,
+} from "@/lib/markets";
+import { groupByCategory } from "@/lib/odds-group";
+
+const RECENT_ODDS_WINDOW_MS = 24 * 60 * 60 * 1000;
+const RECENT_ODDS_LIMIT = 500;
+const ROWS_PER_CATEGORY = 6;
 
 function statusBadge(status: ScraperStatus): React.ReactNode {
   const latest = status.last_run;
@@ -49,6 +61,27 @@ export function ScrapersPage() {
     queryFn: () => api.scrapersStatus(),
     refetchInterval: 30_000,
   });
+
+  // Anchored once per mount so the `captured_from` query param is stable across
+  // refetches and TanStack Query doesn't treat each second as a new queryKey.
+  const sinceIso = React.useMemo(
+    () => new Date(Date.now() - RECENT_ODDS_WINDOW_MS).toISOString(),
+    [],
+  );
+  const recentOddsQuery = useQuery({
+    queryKey: ["scrapers", "recent-odds", sinceIso],
+    queryFn: () =>
+      api.listOdds({ captured_from: sinceIso, limit: RECENT_ODDS_LIMIT }),
+    refetchInterval: 30_000,
+  });
+  const markets = useMarketRegistry();
+  const grouped = React.useMemo(
+    () =>
+      groupByCategory(recentOddsQuery.data?.items ?? [], markets.byCode, {
+        perCategory: ROWS_PER_CATEGORY,
+      }),
+    [recentOddsQuery.data, markets.byCode],
+  );
 
   const triggerMutation = useMutation({
     mutationFn: (bookmaker: string) => api.triggerScrape(bookmaker),
@@ -189,6 +222,59 @@ export function ScrapersPage() {
               );
             })}
       </div>
+
+      <section className="space-y-4" aria-labelledby="recent-odds-heading">
+        <div>
+          <h2 id="recent-odds-heading" className="text-lg font-semibold tracking-tight">
+            Recent scraped odds
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Up to {ROWS_PER_CATEGORY} most recent rows per market category from the last 24 hours,
+            mixed across providers. Refreshes with the cards above.
+          </p>
+        </div>
+
+        {recentOddsQuery.error ? (
+          <ErrorBanner
+            title="Failed to load recent odds"
+            description={
+              recentOddsQuery.error instanceof Error
+                ? recentOddsQuery.error.message
+                : String(recentOddsQuery.error)
+            }
+          />
+        ) : null}
+
+        {recentOddsQuery.isLoading || markets.isLoading ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
+          </div>
+        ) : grouped.size === 0 ? (
+          <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            No odds scraped in the last 24 hours.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {CATEGORY_ORDER.filter((c) => (grouped.get(c)?.length ?? 0) > 0).map((category) => {
+              const rows = grouped.get(category) ?? [];
+              return (
+                <Card key={category}>
+                  <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+                    <CardTitle className="text-base">{CATEGORY_LABELS[category]}</CardTitle>
+                    <Badge variant="outline" className="font-normal">
+                      {rows.length} row{rows.length === 1 ? "" : "s"}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <OddsRowsTable rows={rows} markets={markets.byCode} />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

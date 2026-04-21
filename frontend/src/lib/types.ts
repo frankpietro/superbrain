@@ -107,17 +107,28 @@ export type MatchesResponse = z.infer<typeof matchesResponse>;
 
 export const oddsSnapshotSchema = z.object({
   bookmaker: bookmakerEnum,
+  bookmaker_event_id: z.string().optional(),
   match_id: z.string().nullable().optional(),
+  match_label: z.string().optional(),
+  match_date: z.string().optional(),
+  season: z.string().optional(),
+  league: leagueEnum.nullable().optional(),
+  home_team: z.string().optional(),
+  away_team: z.string().optional(),
   market: z.string(),
   market_params: z.record(z.unknown()),
   selection: z.string(),
   payout: z.number().positive(),
   captured_at: z.string(),
+  source: z.string().optional(),
+  run_id: z.string().optional(),
 });
 export type OddsSnapshot = z.infer<typeof oddsSnapshotSchema>;
 
 export const oddsResponse = z.object({
   items: z.array(oddsSnapshotSchema),
+  count: z.number().int().nonnegative().optional(),
+  next_cursor: z.string().nullable().optional(),
 });
 export type OddsResponse = z.infer<typeof oddsResponse>;
 
