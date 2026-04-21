@@ -127,20 +127,43 @@ class ScrapeRunRow(BaseModel):
     host: str | None
 
 
+class UnmappedMarket(BaseModel):
+    """One entry in a scraper's top-unmapped-markets list."""
+
+    name: str
+    count: int
+
+
+class ScraperHistoryEntry(BaseModel):
+    """Compact per-run slice rendered as a sparkline on the scrapers page."""
+
+    run_id: str
+    started_at: datetime
+    rows_written: int
+    status: str
+
+
 class ScrapersStatusBookmaker(BaseModel):
     """Per-bookmaker status block for ``GET /scrapers/status``."""
 
     bookmaker: str
     last_run: ScrapeRunRow | None
+    healthy: bool
     runs_24h: int
     rows_written_24h: int
     errors_24h: int
+    unmapped_markets_top: list[UnmappedMarket] = Field(default_factory=list)
+    history: list[ScraperHistoryEntry] = Field(default_factory=list)
 
 
 class ScrapersStatus(BaseModel):
-    """Shape returned by ``GET /scrapers/status``."""
+    """Shape returned by ``GET /scrapers/status``.
 
-    bookmakers: list[ScrapersStatusBookmaker]
+    Wraps the per-bookmaker blocks in the ``items`` envelope used by every
+    other list endpoint so the SPA can lean on a single response shape.
+    """
+
+    items: list[ScrapersStatusBookmaker]
 
 
 class MarketInfo(BaseModel):
