@@ -235,6 +235,32 @@ superbrain/
 └── data/                     gitignored; local lake for dev
 ```
 
+### Value-bet engine (phase 4a, 2026-04-21)
+
+The engine is a behaviour-preserving port of `fbref24/refactored_src/{engine,bets}` onto the new lake (Polars + DuckDB) and the new `Market` / `OddsSnapshot` pydantic contracts. Lives under `src/superbrain/engine/` and `src/superbrain/engine/bets/`. Imports are side-effect-driven: importing `superbrain.engine.bets` registers every concrete strategy into `BET_REGISTRY` by virtue of the `@register(Market.X)` decorator.
+
+Pipeline shape:
+
+1. `build_engine_context(lake, fixture=..., config=...)` reads `matches` + `team_match_stats` rows with `match_date < fixture.match_date` (strict no-leakage), attaches an `opponent` column (derived from the matches table), clusters, merges opponent clusters, and computes the `(team, season)` similarity matrix.
+2. `price_fixture(...)` iterates every registered `BetStrategy`, pulls the neighbor sample once per target column per fixture, and feeds it to `strategy.compute_probability(outcome, values_home=..., values_away=...)`. Outcomes with fewer than `config.probability.min_matches` (default 6) on either side are skipped.
+3. `find_value_bets(...)` joins `price_fixture`'s output against the latest snapshot per `(bookmaker, market, selection, params)` tuple, computes `edge = model_probability - 1/decimal_odds`, and emits `ValueBet` rows sorted by descending edge.
+
+Parameters (matching the old repo's production defaults):
+
+- Clustering — `sklearn.cluster.AgglomerativeClustering(metric="cosine", linkage="average")` with `n_clusters=8`, `StandardScaler` on the feature columns `(goals, goals_conceded, shots, shots_on_target, corners, yellow_cards, fouls)`.
+- Similarity — per `(team, season)`, an `n_clusters × n_clusters` `(cluster, opponent_cluster)` co-occurrence matrix, normalised row-wise to a probability distribution; similarity = `1 / (1 + euclid_distance(flat_A, flat_B))` — equivalent to the old Frobenius formulation because flattening preserves the norm. Implemented with `scipy.spatial.distance.pdist` + `squareform`, fully vectorised.
+- Probability — quantile threshold `q = 0.7`, minimum sample `min_matches = 6`. For a fixture we pool target-stat values from matches where `(team, opponent, season)` triples are in the similarity neighborhood of the home/away teams.
+- Value bet — `edge_threshold = 0.05` default, tunable from config.
+
+Registered markets (13): `cards_total`, `corner_1x2`, `corner_combo`, `corner_handicap`, `corner_team`, `corner_total`, `goals_both_teams`, `goals_over_under`, `goals_team`, `match_1x2`, `match_double_chance`, `shots_on_target_total`, `shots_total`. Every strategy is stateless and declares `target_stat_columns()` as the `TeamMatchStats` columns it needs.
+
+Intentional deviations from the old repo (none change observable behaviour on the canonical slice):
+
+- Opponent-cluster join uses `(match_id, opponent)` instead of `(date, season, team, opponent)` — equivalent by construction and ~10x faster on large lakes.
+- Caching: in-process LRU on `(target_column, home, away, season)` inside `price_fixture` instead of the old disk-based `engine/cache.py` (lake is the durable layer; re-pricing is cheap enough that a pickle cache is net-negative on CI).
+
+Golden regression corpus and full end-to-end backtest are **deferred to phase 4b** (see *Deferred / open*). Unit tests cover clustering determinism + partition invariance under row permutation, similarity symmetry / range / hand-computed reference value, and neighbor pooling on a hand-computed 5-team toy. `tests/engine/test_*.py` (22 tests) is the current correctness floor.
+
 ### Dev environment
 
 Trade-offs made on the owner's personal dev machine. See `AGENTS.md` → "Operating principle".
@@ -514,6 +540,10 @@ Items that will be decided as phases land:
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
 - **CI `gaia doctor` job** — disabled in CI (2026-04-21) because Gaia is a private repo and the job can't clone it without a PAT. Re-enable by adding a `GAIA_READ_PAT` repository secret and restoring the `gaia` job in `.github/workflows/ci.yml`. Local coverage via the pre-push hook and the Cursor session-start hook is adequate in the interim.
+- **Phase 4a follow-ups** (2026-04-21, tracked for phase 4b):
+  1. **Golden regression corpus.** `scripts/generate_engine_golden.py` that runs `fbref24/refactored_src/engine/pipeline.py` against a frozen Serie A 2023-24 slice (first 20 matchdays), captures the `(cluster_assignment, similarity_matrix_checksum, per-fixture priced outcomes, per-fixture value bets)` tuple into `tests/engine/fixtures/golden/`, and `tests/engine/test_regression.py` that fails on any deviation beyond `abs(new - old) <= 1e-6` on probabilities and exact equality on cluster partition. Blocked on: the old repo uses pandas + its own lake layout, needs an adapter from the new Polars lake to the old pandas shape. Ship as a dedicated `feat(engine): golden regression corpus` PR.
+  2. **End-to-end backtest + integration + no-leakage tests.** `src/superbrain/engine/backtest.py` is implemented (`run_backtest` + `_NoLeakageLake` proxy) and merged under phase 4a but has no test coverage yet; phase 4b ships `tests/engine/test_pipeline.py` (integration against a 20-match synthetic lake) and `tests/engine/test_backtest.py` (asserts `hits + misses == n_bets`, ROI math correct, `_NoLeakageLake` raises on reads of match-of-interest rows).
+  3. **Per-strategy bet unit tests.** Each registered `BetStrategy` needs its own `test_bets.py::test_<market>` asserting `iter_outcomes` covers every selection it emits and `compute_probability` returns a non-zero probability on a hand-constructed neighbor sample.
 
 ---
 
