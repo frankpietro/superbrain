@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { Brain, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { sanitizeBearerToken } from "@/lib/auth-token";
 import { useAuth } from "@/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,10 +22,15 @@ export function LoginPage() {
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    const sanitized = sanitizeBearerToken(token);
+    if (!sanitized.ok) {
+      setError(sanitized.reason);
+      return;
+    }
     setLoading(true);
     try {
       await api.health();
-      setToken(token.trim());
+      setToken(sanitized.token);
       try {
         await api.verifyToken();
       } catch (err) {
