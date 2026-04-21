@@ -306,6 +306,19 @@ Every scraper module satisfies:
 - **Forensic payload.** Every odds row keeps a `raw_json` column so a parser regression can be replayed against stored payloads.
 - **Observability.** Each run writes a row to `data/lake/scrape_runs/` (start, end, rows, quarantined, latency, git SHA). The SPA "Scraper Health" page reads these directly.
 
+### Eurobet scraper (phase 3, 2026-04-21)
+
+Production scraper lives in `src/superbrain/scrapers/bookmakers/eurobet/`. Dual transport: plain `httpx` for public navigation (`prematch-homepage-service`, `prematch-menu-service`), **`curl_cffi` with `impersonate="chrome124"`** for the Cloudflare-gated `detail-service` (per-event + per-meeting). `curl_cffi` is now a hard runtime dep (see `pyproject.toml`); it carries a vendored libcurl-impersonate.
+
+- **Cloudflare bot-fight gate.** `www.eurobet.it` fronts `detail-service` with Bot Fight Mode. Plain `httpx` returns `403 cf-mitigated: challenge`. TLS / JA3 impersonation is the only thing Cloudflare checks — cookies and Playwright are not required. UA string is cosmetic once the fingerprint matches.
+- **Mandatory tenant headers** on every `detail-service` call: `X-EB-MarketId: IT` and `X-EB-PlatformId: WEB`. Missing `X-EB-MarketId` → backend 404. Missing `X-EB-PlatformId` → `{"code":-99,"description":"validation error"}`. Cloudflare occasionally strips or cache-poisons `X-EB-PlatformId` on the meeting endpoint; the scraper tolerates this by fusing `top-disciplines` (public, always available) with `detail-service/meeting` (authoritative) and deduping events.
+- **Discipline/meeting slugs.** `calcio` for football. Top-5 meeting slugs verified live: `it-serie-a` (21), `ing-premier-league` (86 — **not** `gb-premier-league` as the spike initially recorded), `de-bundesliga` (4), `es-liga` (79), `fr-ligue-1` (14).
+- **Rate limit.** Single shared `_RateLimiter` on the client, ≤ 1 req/s across both transports. Per-event market fetches run under `asyncio.Semaphore(3)` on top of that.
+- **Mapped market families.** 1X2 full + per-half, 1X2 handicap, double chance, goals over/under, BTTS, multigoal (full + per-team), goals-per-team Y/N, exact score (incl. XL variants), HT/FT, corners 1X2, corners over/under, cards over/under. "SCOMMESSE TOP" compound groups (`betId` 1549 / 6754) are fan-out-walked into the individual families. `_FAMILY_BY_BET_ID` in `markets.py` is the canonical mapping; the exact-score XL market has two `betId` variants (`5458` and `5474`) depending on fixture.
+- **Known gaps (unmapped, logged once per run).** On the 2026-04-21 live measurement (49 events, top-5 leagues): `QUASI VINCE`, `1X2 + U/O`, `1X + U/O`, `X2 + U/O`, `GG/NG + U/O`, `RIS. ESATTO A GRUPPI` — all appear on ~every event (49/49). These are combo / grouped markets; follow-up phase can map them once we decide whether they fold into existing market families or get their own codes. Match-day-only groups (scorers, corners-team, cards combos, shots, asian handicap) are passed through unmapped for now — the spike catalog documents them but phase 3a intentionally keeps scope to families Sisal and Goldbet already cover.
+- **Measured output (2026-04-21 live run).** 49 events discovered (10/10/9/10/10 across Serie A / Premier / Bundesliga / La Liga / Ligue 1), 5 981 snapshots received, 5 785 written (196 deduped against same-minute re-pricing). Distribution: 3 626 exact-score, 879 1X2, 694 goals-O/U, 441 HT-FT, 196 BTTS, 145 double-chance. No errors.
+- **Live smoke test.** `SUPERBRAIN_LIVE_TESTS=1 uv run pytest tests/scrapers/bookmakers/eurobet/test_live.py`.
+
 ---
 
 ## Gotchas
