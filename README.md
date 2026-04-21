@@ -103,6 +103,33 @@ CI runs `lint`, `typecheck`, unit tests, and a production `build` on every
 PR. Full details (route map, design tokens, architectural decisions) in
 `frontend/README.md` and `docs/knowledge.md` → *SPA*.
 
+## Deploy
+
+Superbrain deploys to **Fly.io free tier** (API + scheduler, sharing one
+persistent volume with the Parquet lake) and **Vercel Hobby** (the SPA).
+
+Full runbook: [`docs/deployment/api-and-spa.md`](docs/deployment/api-and-spa.md).
+Scheduler-only runbook: [`docs/deployment/scheduler.md`](docs/deployment/scheduler.md).
+
+Quick shape:
+
+```bash
+# API (Fly)
+fly launch --config deploy/api/fly.toml --no-deploy --copy-config --name superbrain-api
+fly volumes create superbrain_data --app superbrain-api --region fra --size 1
+fly secrets set --app superbrain-api SUPERBRAIN_API_TOKENS="<long-random>"
+fly deploy --config deploy/api/fly.toml --dockerfile deploy/api/Dockerfile
+
+# SPA (Vercel)
+cd frontend
+vercel link
+vercel env add VITE_API_BASE_URL production   # → https://superbrain-api.fly.dev
+vercel env add VITE_API_TOKEN    production   # → same token
+vercel --prod
+```
+
 ## Status
 
-Early seed (phase 0). See the plan in the user's Cursor session for the phase sequence.
+Phases 0 – 7 shipped. Phase 4b (engine tests + ablation), Phase 5 (scheduler),
+and Phase 8 (alerts) are in flight. Phase 9 (this commit) wires the deploy
+configs for the pieces already on `main`.
