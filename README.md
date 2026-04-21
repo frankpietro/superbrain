@@ -59,7 +59,7 @@ superbrain/
 │   ├── analytics/            ROI, Kelly, calibration, drawdown, cohorts
 │   ├── backtest/             sliding window + parallel grid
 │   └── api/                  FastAPI app + routers + scheduler + alerts
-├── frontend/                 (added in phase 9)
+├── frontend/                 Vite+React+TS SPA (phase 7)
 ├── scripts/                  one-off maintenance, legacy imports
 ├── tests/
 └── data/                     gitignored local lake
@@ -85,6 +85,23 @@ uv run python -m superbrain.scrapers.run --bookmaker=sisal   # added in phase 3
 ```
 
 See `docs/knowledge.md` → *Scraper reliability contract* for the guarantees every scraper satisfies.
+
+## Frontend
+
+The SPA lives in `frontend/` and is built with Vite + React 18 + TypeScript
+(strict) + Tailwind + shadcn/ui-style primitives, TanStack Router/Query,
+zustand, and `react-plotly.js`. Quick start:
+
+```bash
+cd frontend
+cp .env.example .env.local        # set VITE_API_BASE_URL=http://localhost:8000
+npm install
+npm run dev                       # http://localhost:5173
+```
+
+CI runs `lint`, `typecheck`, unit tests, and a production `build` on every
+PR. Full details (route map, design tokens, architectural decisions) in
+`frontend/README.md` and `docs/knowledge.md` → *SPA*.
 
 ## Status
 

@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 160 24% 98%;
+    --foreground: 155 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 155 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 155 25% 10%;
+
+    --primary: 155 66% 26%;
+    --primary-foreground: 140 40% 98%;
+
+    --secondary: 150 20% 94%;
+    --secondary-foreground: 155 25% 18%;
+
+    --muted: 150 16% 93%;
+    --muted-foreground: 155 10% 40%;
+
+    --accent: 155 66% 92%;
+    --accent-foreground: 155 66% 20%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 148 62% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 95% 50%;
+    --warning-foreground: 0 0% 10%;
+
+    --border: 150 14% 88%;
+    --input: 150 14% 88%;
+    --ring: 155 66% 30%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 155 18% 7%;
+    --foreground: 150 20% 94%;
+
+    --card: 155 18% 10%;
+    --card-foreground: 150 20% 94%;
+
+    --popover: 155 18% 10%;
+    --popover-foreground: 150 20% 94%;
+
+    --primary: 150 64% 52%;
+    --primary-foreground: 155 20% 8%;
+
+    --secondary: 155 14% 16%;
+    --secondary-foreground: 150 20% 94%;
+
+    --muted: 155 14% 16%;
+    --muted-foreground: 150 12% 66%;
+
+    --accent: 155 30% 22%;
+    --accent-foreground: 150 50% 88%;
+
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 148 55% 48%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 90% 58%;
+    --warning-foreground: 0 0% 10%;
+
+    --border: 155 14% 22%;
+    --input: 155 14% 22%;
+    --ring: 150 64% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1,
+      "ss01" 1;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer utilities {
+  .scroll-soft {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+}
