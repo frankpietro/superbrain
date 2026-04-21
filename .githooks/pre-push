@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Pre-push safety net: a stack-agnostic knowledge-log nudge.
+#
+# This file is the Gaia default; it does NOT assume any particular language or
+# toolchain. Projects that want lint/typecheck/test gating before push should
+# append their own block below the marker — `gaia update` will preserve
+# everything after the marker on subsequent updates.
+#
+# Seeded from Gaia (https://github.com/frankpietro/gaia).
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$current_branch" == "main" ]]; then
+  echo "pre-push: on main, skipping local checks."
+  exit 0
+fi
+
+# Speed: one diff pass over only the paths we care about, and one ref check.
+# Correctness: if origin/main isn't fetched locally (fresh
+# clone, brand-new worktree), the nudges below would silently produce false
+# negatives. In that case we print a tiny note and skip — better than lying.
+base_ref="origin/main"
+if ! git rev-parse --verify --quiet "$base_ref" >/dev/null; then
+  cat >&2 <<EOF
+
+  [pre-push] NOTE: \`$base_ref\` not present locally; skipping
+  knowledge-log / outbox nudges. Run \`git fetch origin\` once and
+  the next push will get them.
+
+EOF
+  echo "pre-push: OK (base ref missing)"
+  exit 0
+fi
+
+files_changed="$(git diff --name-only "$base_ref"...HEAD 2>/dev/null || true)"
+kno_diff="$(git diff "$base_ref"...HEAD -- docs/knowledge.md .gaia/outbox.md 2>/dev/null || true)"
+
+knowledge_touched=0
+if printf '%s\n' "$files_changed" | grep -q '^docs/knowledge\.md$'; then
+  knowledge_touched=1
+fi
+
+if [[ "$knowledge_touched" -eq 0 ]]; then
+  cat >&2 <<'EOF'
+
+  [pre-push] NOTE: docs/knowledge.md was NOT updated on this branch.
+
+  The living log is the project's shared memory. If this PR introduces
+  a new decision, convention, gotcha, or glossary term, please update
+  docs/knowledge.md before merging (see AGENTS.md > "Read the knowledge
+  first" > "Pre-merge checklist").
+
+  If this PR is purely cosmetic (formatting, typo fix), ignore this.
+
+EOF
+fi
+
+# A "GENERAL:" entry added to the knowledge log should have a matching
+# outbox entry so the dedicated Gaia promote chat can drain it.
+general_added=0
+outbox_added=0
+if printf '%s\n' "$kno_diff" | grep -Eq '^\+.*GENERAL:'; then
+  general_added=1
+fi
+if printf '%s\n' "$kno_diff" | grep -Eq '^\+id: '; then
+  outbox_added=1
+fi
+
+if [[ "$general_added" -eq 1 && "$outbox_added" -eq 0 ]]; then
+  cat >&2 <<'EOF'
+
+  [pre-push] NOTE: a "GENERAL:" entry was added to docs/knowledge.md,
+  but no new entry in .gaia/outbox.md.
+
+  Stage the upstream promotion locally before pushing:
+
+    gaia outbox add --tier core --title "<headline>" \
+      --body "Why + what to change in Gaia"
+
+  The outbox is drained into real Gaia PRs from a separate Cursor
+  chat opened in the Gaia repo — never from this project's session.
+
+EOF
+fi
+
+if [[ "$outbox_added" -eq 1 ]]; then
+  cat >&2 <<'EOF'
+
+  [pre-push] NOTE: new entries queued in .gaia/outbox.md.
+
+  Remember to open a dedicated Gaia chat soon to drain the queue
+  into upstream PRs (see docs/HOW_TO_PROMOTE.md in the Gaia repo).
+
+EOF
+fi
+
+# --- PROJECT-SPECIFIC CHECKS BELOW ---------------------------------------
+# Anything below this marker is preserved by `gaia update`.
+# Add lint / typecheck / test invocations here as appropriate for this
+# project (see docs/knowledge.md for the canonical commands).
+
+echo "pre-push: OK"

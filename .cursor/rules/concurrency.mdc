@@ -1,0 +1,37 @@
+---
+description: Concurrent-agent safety. Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# Concurrent agents — at-hand reference
+
+Full contract + recovery playbook: `AGENTS.md` → *You are not alone
+in this repo*.
+
+A `sessionStart` hook at `.cursor/hooks/auto-branch.sh` auto-creates
+`agent/session-<id>-<ts>` when your session starts on a clean
+`main`. You don't invoke it — just work normally.
+
+## 30-second pre-flight if the hook did not run
+
+```bash
+git status                                              # tree clean?
+git rev-parse --abbrev-ref HEAD                         # branch?
+git log --oneline origin/main..HEAD       # your commits?
+gh pr list --state open                                 # sibling PRs?
+```
+
+Anything suspicious → **stop and ask the user** before editing.
+
+## Hard rules
+
+1. One task = one branch = one PR. Never share a branch.
+2. Create your branch before the first edit, not after.
+3. Stage only files you changed; `git status` before every commit.
+   Foreign files → stop and follow *Recovery* in AGENTS.md.
+4. Rebase on `origin/main` before opening a PR.
+5. Never force-push a branch you did not create. Never `--no-verify`.
+   Never `git commit --amend` after push.
+6. When unsure, open the PR without auto-merge and hand to the user.
+
+For parallel work, one `git worktree` per agent (see AGENTS.md).
