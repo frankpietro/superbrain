@@ -260,6 +260,66 @@ Every scraper module satisfies:
 - **Forensic payload.** Every odds row keeps a `raw_json` column so a parser regression can be replayed against stored payloads.
 - **Observability.** Each run writes a row to `data/lake/scrape_runs/` (start, end, rows, quarantined, latency, git SHA). The SPA "Scraper Health" page reads these directly.
 
+### Goldbet scraper (phase 3, 2026-04-21)
+
+Production scraper at `src/superbrain/scrapers/bookmakers/goldbet/`.
+Full usage and endpoint catalog live in that module's `README.md`; this
+entry records the decisions future agents need to know without reading
+the code.
+
+- **Akamai bootstrap.** Goldbet is fronted by Akamai Bot Manager with
+  JA3 fingerprinting. A plain `httpx` client is blocked at the edge
+  with `HTTP 403`. The scraper uses **`curl_cffi` with
+  `impersonate="chrome124"`**, evaluated in a 20-minute time-box
+  against Playwright: `curl_cffi` alone clears the edge today, removes
+  the need for a Chromium binary and `playwright install`, and keeps
+  the runtime footprint small. Playwright is the documented fallback
+  in the module README if fingerprint aging ever breaks it.
+- **Cookie refresh cadence.** Reactive, not scheduled. One GET against
+  `https://www.goldbet.it/scommesse/sport/calcio/` seeds `_abck`,
+  `bm_sz`, `ak_bmsc` into the session jar at startup; any downstream
+  `403` triggers a single in-flight refresh before retries give up.
+  Long-running processes (APScheduler inside Fly) open a fresh session
+  per scrape, so cookie staleness is bounded by scrape frequency.
+- **Mandatory headers.** `X-Brand: 1`, `X-IdCanale: 1`,
+  `X-AcceptConsent: false`, `X-Verticale: 1` on every JSON request.
+  Missing any of the four → `HTTP 403` even with valid Akamai cookies.
+- **Market families mapped.** `MATCH_1X2`, `MATCH_DOUBLE_CHANCE`,
+  `GOALS_OVER_UNDER`, `HALVES_OVER_UNDER` (HT + 2H), `GOALS_BOTH_TEAMS`,
+  `GOALS_TEAM` (per-side O/U), `COMBO_1X2_OVER_UNDER`,
+  `COMBO_BTTS_OVER_UNDER`, `SCORE_EXACT`, `SCORE_HT_FT`, `CORNER_TOTAL`
+  (match + 1H), `MULTIGOL` (full-match), `MULTIGOL_TEAM` (per-side).
+  Per-event cost: ~26 requests (Principali + ~25 tab blocks).
+- **Market discovery beyond the spike.** The spike's README said
+  only `macroTab=0` returned odds; that was too conservative.
+  `getDetailsEventAams` **does** return odds when called with each
+  tab's `tbI` (e.g. `3500` for Angoli, `3491` for Multigol). The
+  orchestrator fetches `tab=0` once (for Principali + the tab tree)
+  and iterates every `tbI` under `lmtW`, lifting per-event coverage
+  from ~19 markets to 200+. See `src/superbrain/scrapers/bookmakers/
+  goldbet/scraper.py::_fetch_event_snapshots`.
+- **Unmapped-market policy.** A curated `_EXPLICIT_SKIP` set in
+  `markets.py` silences families that don't cleanly map onto the
+  shared `Market` enum (half-time 1X2, parity, handicap 1X2, bucketed
+  totals, VAR / penalty / card-coach specials). Genuinely unknown `mn`
+  strings get one `goldbet.unmapped_market` log entry per run. Missing
+  markets never fail an event; missing events never fail a league.
+- **Rate limit & concurrency.** ≤ 1 HTTP req/s (token bucket);
+  `asyncio.Semaphore(3)` on per-event market fetches; tenacity with 3
+  attempts + expo backoff + jitter; `403` triggers one cookie refresh.
+- **Known product gaps.** No shots / tiri markets on Serie A regular
+  season. No team-specific cards O/U (Sanzioni tab is coach bookings,
+  penalty markets, VAR specials only). Anytime / first-goalscorer
+  markets live under a separate antepost `idTournament` and aren't on
+  the production path yet.
+- **Tournament IDs.** Hard-coded in `client.TOP5_TOURNAMENTS`. If
+  Goldbet renumbers, `getProgram/` enumerates the full tree.
+- **GENERAL: `OddsSnapshot` dedupe keys include `captured_at`.** Tests
+  that assert idempotency of a scrape must monkeypatch
+  `datetime.now()` to a frozen instant inside the scraper/parser
+  modules, otherwise a second run legitimately writes fresh rows. See
+  `tests/scrapers/bookmakers/goldbet/test_scraper.py::test_scrape_is_idempotent`.
+
 ---
 
 ## Gotchas
