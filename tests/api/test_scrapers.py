@@ -69,7 +69,8 @@ def test_status_aggregates_last_24h(
     _seed_runs(lake)
     resp = client.get("/scrapers/status", headers=auth_header)
     assert resp.status_code == 200
-    blocks = {b["bookmaker"]: b for b in resp.json()["bookmakers"]}
+    body = resp.json()
+    blocks = {b["bookmaker"]: b for b in body["items"]}
     assert set(blocks.keys()) == {"sisal", "goldbet", "eurobet"}
     sisal = blocks["sisal"]
     assert sisal["last_run"] is not None
@@ -77,4 +78,50 @@ def test_status_aggregates_last_24h(
     assert sisal["runs_24h"] == 2
     assert sisal["rows_written_24h"] == 150
     assert sisal["errors_24h"] == 1
-    assert blocks["eurobet"]["last_run"] is None
+    assert sisal["healthy"] is False  # r2 was partial
+    # history is newest-first, capped, and carries the compact fields the SPA renders.
+    assert [h["run_id"] for h in sisal["history"]] == ["r1", "r2"]
+    assert sisal["unmapped_markets_top"] == []
+
+    goldbet = blocks["goldbet"]
+    assert goldbet["last_run"]["run_id"] == "r3"
+    assert goldbet["healthy"] is True
+    assert goldbet["errors_24h"] == 0
+
+    eurobet = blocks["eurobet"]
+    assert eurobet["last_run"] is None
+    assert eurobet["healthy"] is False
+    assert eurobet["history"] == []
+
+
+def test_status_normalises_success_status_to_ok(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    """Real scrapers write ``status='success'``; the API must emit ``'ok'``.
+
+    Without normalisation the SPA's badge logic (``status === 'ok'``) would
+    falsely flag every healthy run as an error.
+    """
+    now = datetime.now(tz=UTC)
+    lake.log_scrape_run(
+        make_scrape_run(
+            run_id="s1",
+            bookmaker=Bookmaker.SISAL,
+            scraper="sisal.prematch",
+            started_at=now - timedelta(minutes=5),
+            status="success",
+            rows_written=10_000,
+        )
+    )
+    resp = client.get("/scrapers/status", headers=auth_header)
+    assert resp.status_code == 200
+    sisal = next(b for b in resp.json()["items"] if b["bookmaker"] == "sisal")
+    assert sisal["last_run"]["status"] == "ok"
+    assert sisal["healthy"] is True
+    assert sisal["errors_24h"] == 0
+    assert sisal["history"][0]["status"] == "ok"
+
+    runs = client.get("/scrapers/runs", params={"bookmaker": "sisal"}, headers=auth_header).json()[
+        "items"
+    ]
+    assert runs[0]["status"] == "ok"
