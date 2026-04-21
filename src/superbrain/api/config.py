@@ -9,9 +9,10 @@ present). Settings are immutable once loaded; tests override them via
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -33,8 +34,10 @@ class Settings(BaseSettings):
     )
 
     lake_path: Path = Field(default=Path("./data/lake"), alias="SUPERBRAIN_LAKE_PATH")
-    api_tokens: tuple[str, ...] = Field(default=("dev-token",), alias="SUPERBRAIN_API_TOKENS")
-    cors_origins: tuple[str, ...] = Field(
+    api_tokens: Annotated[tuple[str, ...], NoDecode] = Field(
+        default=("dev-token",), alias="SUPERBRAIN_API_TOKENS"
+    )
+    cors_origins: Annotated[tuple[str, ...], NoDecode] = Field(
         default=("http://localhost:5273",), alias="SUPERBRAIN_CORS_ORIGINS"
     )
     log_level: str = Field(default="INFO", alias="SUPERBRAIN_LOG_LEVEL")

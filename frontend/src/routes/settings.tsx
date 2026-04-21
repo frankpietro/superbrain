@@ -113,7 +113,7 @@ export function SettingsPage() {
             </label>
             <Input
               id="api-base"
-              value={import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}
+              value={import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8100"}
               readOnly
               aria-readonly
             />
