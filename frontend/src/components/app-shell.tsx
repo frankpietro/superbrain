@@ -4,9 +4,11 @@ import {
   BarChart3,
   Brain,
   CircleUserRound,
+  Clock,
   GanttChart,
   LayoutDashboard,
   ListOrdered,
+  Receipt,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/stores/auth";
@@ -17,15 +19,30 @@ interface NavLink {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  children?: NavLink[];
 }
 
 const NAV: NavLink[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/matches", label: "Matches", icon: ListOrdered },
   { to: "/scrapers", label: "Scrapers", icon: Activity },
-  { to: "/bets/value", label: "Value bets", icon: Sparkles },
+  {
+    to: "/bets",
+    label: "Bets",
+    icon: Receipt,
+    children: [
+      { to: "/bets", label: "Recent", icon: Clock },
+      { to: "/bets/value", label: "Value", icon: Sparkles },
+    ],
+  },
   { to: "/backtest", label: "Backtest", icon: GanttChart },
 ];
+
+function isActive(to: string, pathname: string): boolean {
+  if (to === "/") return pathname === "/";
+  if (to === "/bets") return pathname === "/bets";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -46,8 +63,49 @@ export function AppShell() {
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map((item) => {
             const Icon = item.icon;
-            const active =
-              item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`);
+            const hasChildren = (item.children?.length ?? 0) > 0;
+            if (hasChildren) {
+              const sectionActive =
+                pathname === item.to || pathname.startsWith(`${item.to}/`);
+              return (
+                <div key={item.to} className="flex flex-col gap-0.5">
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                      sectionActive
+                        ? "text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {item.label}
+                  </div>
+                  <div className="ml-5 flex flex-col gap-0.5 border-l border-border pl-2">
+                    {(item.children ?? []).map((child) => {
+                      const ChildIcon = child.icon;
+                      const active = isActive(child.to, pathname);
+                      return (
+                        <Link
+                          key={child.to}
+                          to={child.to}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                            active
+                              ? "bg-accent text-accent-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                          aria-current={active ? "page" : undefined}
+                        >
+                          <ChildIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            const active = isActive(item.to, pathname);
             return (
               <Link
                 key={item.to}

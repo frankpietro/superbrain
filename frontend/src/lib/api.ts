@@ -148,8 +148,15 @@ export const api = {
     limit?: number;
   }) => apiFetch("/matches", matchesResponse, { query: params }),
   getMatch: (id: string) => apiFetch(`/matches/${encodeURIComponent(id)}`, matchSchema),
-  listOdds: (params: { match_id: string; bookmaker?: string; market?: string }) =>
-    apiFetch("/odds", oddsResponse, { query: params }),
+  listOdds: (params: {
+    match_id?: string;
+    bookmaker?: string;
+    market?: string;
+    season?: string;
+    captured_from?: string;
+    limit?: number;
+    cursor?: string;
+  }) => apiFetch("/odds", oddsResponse, { query: params }),
   scrapersRuns: (params?: { limit?: number; bookmaker?: string }) =>
     apiFetch("/scrapers/runs", scrapeRunsResponse, { query: params }),
   scrapersStatus: () => apiFetch("/scrapers/status", scraperStatusResponse),
