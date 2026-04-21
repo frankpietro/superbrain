@@ -754,6 +754,19 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
   directly. The Phase 5 default is `DEFAULT_HISTORICAL_CRON =
   "0 4 * * mon-fri"` in `scheduler/config.py`. Cost us ~20 min of
   staring at failing trigger tests before spotting the off-by-one.
+- 2026-04-21 — **GENERAL: Plotly's `useResizeHandler` needs a sized
+  parent.** `react-plotly.js` with `useResizeHandler` and
+  `style={{ width: "100%", height: "100%" }}` on the inner `<Plot>`
+  only works when its wrapper has concrete dimensions. If the wrapper
+  is a bare `<div>` with no width/height, the `100%` has nothing to
+  resolve against and Plotly falls back to its default autosize
+  (~450×700 px), which overflows the parent slot and bleeds y-axis
+  tick labels across surrounding UI. In
+  `frontend/src/components/plot.tsx` the `Chart` wrapper therefore
+  defaults to `h-full w-full` (callers can override via `className`).
+  Caught it on the scrapers page where the per-bookmaker sparkline's
+  tick marks ("6785k", "11,678k", …) were rendered under the Trigger
+  scrape button. See `fix/scraper-card-chart-overflow`.
 - 2026-04-21 — **pytest-asyncio 1.x leaks an event loop + socket per
   module boundary** in Python 3.12 via `_temporary_event_loop_policy`.
   Once a later test triggers `gc.collect()` (hypothesis does this in

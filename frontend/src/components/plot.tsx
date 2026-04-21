@@ -33,8 +33,16 @@ const defaultConfig: Partial<Config> = {
 };
 
 export function Chart({ data, layout, config, className, ariaLabel }: PlotProps) {
+  // Wrapper must have concrete dimensions for Plotly's 100% height/width and
+  // `useResizeHandler` to resolve — otherwise Plotly falls back to its default
+  // autosize (~450×700) and overflows the parent slot. Callers can override
+  // the size via `className`.
   return (
-    <div className={className} role="img" aria-label={ariaLabel ?? "chart"}>
+    <div
+      className={className ?? "h-full w-full"}
+      role="img"
+      aria-label={ariaLabel ?? "chart"}
+    >
       <Plot
         data={data}
         layout={{ ...defaultLayout, ...layout }}
