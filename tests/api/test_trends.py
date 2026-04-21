@@ -173,9 +173,7 @@ def test_variability_rejects_bad_group_by(
 def test_variability_empty_lake_returns_empty_items(
     client: TestClient, auth_header: dict[str, str]
 ) -> None:
-    resp = client.get(
-        "/trends/variability", params={"group_by": "market"}, headers=auth_header
-    )
+    resp = client.get("/trends/variability", params={"group_by": "market"}, headers=auth_header)
     assert resp.status_code == 200
     body = resp.json()
     assert body["items"] == []

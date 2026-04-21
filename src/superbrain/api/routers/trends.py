@@ -165,9 +165,9 @@ def _variability_sync(
 
     series = series.with_columns(
         (pl.col("std_payout") / pl.col("mean_payout") * 100.0).alias("cv_pct"),
-        (
-            (pl.col("max_payout") - pl.col("min_payout")) / pl.col("mean_payout") * 100.0
-        ).alias("range_pct"),
+        ((pl.col("max_payout") - pl.col("min_payout")) / pl.col("mean_payout") * 100.0).alias(
+            "range_pct"
+        ),
     )
 
     if group_by == "market":
@@ -277,9 +277,7 @@ def _ttk_sync(
     frame = _load_odds(
         lake, bookmaker=bookmaker, market=market, league=league, since_hours=since_hours
     )
-    empty = TrendsTimeToKickoffResponse(
-        bucket_hours=bucket_hours, total_transitions=0, buckets=[]
-    )
+    empty = TrendsTimeToKickoffResponse(bucket_hours=bucket_hours, total_transitions=0, buckets=[])
     if frame.is_empty():
         return empty
 
@@ -288,10 +286,7 @@ def _ttk_sync(
     frame = frame.with_columns(
         pl.col("payout").shift(1).over(list(_SERIES_KEYS)).alias("prev_payout"),
         pl.col("captured_at").shift(1).over(list(_SERIES_KEYS)).alias("prev_captured_at"),
-        pl.col("payout")
-        .count()
-        .over(list(_SERIES_KEYS))
-        .alias("series_points"),
+        pl.col("payout").count().over(list(_SERIES_KEYS)).alias("series_points"),
     )
     transitions = frame.filter(
         pl.col("prev_payout").is_not_null()
@@ -314,10 +309,7 @@ def _ttk_sync(
         (
             (
                 pl.col("kickoff")
-                - (
-                    pl.col("prev_captured_at")
-                    + pl.duration(seconds=pl.col("mid_offset_s"))
-                )
+                - (pl.col("prev_captured_at") + pl.duration(seconds=pl.col("mid_offset_s")))
             ).dt.total_seconds()
             / 3600.0
         ).alias("hours_to_kickoff"),
@@ -331,19 +323,25 @@ def _ttk_sync(
         return empty
 
     transitions = transitions.with_columns(
-        (
-            (pl.col("hours_to_kickoff") / bucket_hours).floor().cast(pl.Int64) * bucket_hours
-        ).alias("hours_min"),
+        ((pl.col("hours_to_kickoff") / bucket_hours).floor().cast(pl.Int64) * bucket_hours).alias(
+            "hours_min"
+        ),
     )
 
-    grouped = transitions.group_by("hours_min").agg(
-        pl.len().alias("n_transitions"),
-        pl.struct(list(_SERIES_KEYS)).n_unique().alias("n_series"),
-        pl.col("abs_delta_pct").mean().alias("mean_abs_delta_pct"),
-        pl.col("abs_delta_pct").median().alias("median_abs_delta_pct"),
-        pl.col("abs_delta_pct").quantile(0.9, interpolation="linear").alias("p90_abs_delta_pct"),
-        (pl.col("abs_delta_pct") > 0).mean().alias("prob_any_change"),
-    ).sort("hours_min")
+    grouped = (
+        transitions.group_by("hours_min")
+        .agg(
+            pl.len().alias("n_transitions"),
+            pl.struct(list(_SERIES_KEYS)).n_unique().alias("n_series"),
+            pl.col("abs_delta_pct").mean().alias("mean_abs_delta_pct"),
+            pl.col("abs_delta_pct").median().alias("median_abs_delta_pct"),
+            pl.col("abs_delta_pct")
+            .quantile(0.9, interpolation="linear")
+            .alias("p90_abs_delta_pct"),
+            (pl.col("abs_delta_pct") > 0).mean().alias("prob_any_change"),
+        )
+        .sort("hours_min")
+    )
 
     buckets = [
         TrendsTtkBucket(
