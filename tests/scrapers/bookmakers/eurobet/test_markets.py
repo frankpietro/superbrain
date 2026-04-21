@@ -21,7 +21,8 @@ FIXTURES = Path(__file__).parent.parent.parent.parent / "fixtures" / "bookmakers
 
 
 def _load(name: str) -> dict[str, Any]:
-    return json.loads((FIXTURES / name).read_text())
+    data: dict[str, Any] = json.loads((FIXTURES / name).read_text())
+    return data
 
 
 @pytest.fixture

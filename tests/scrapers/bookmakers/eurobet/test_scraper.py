@@ -11,6 +11,7 @@ Both transports are stubbed:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,8 @@ FIXTURES = Path(__file__).parent.parent.parent.parent / "fixtures" / "bookmakers
 
 
 def _load(name: str) -> dict[str, Any]:
-    return json.loads((FIXTURES / name).read_text())
+    data: dict[str, Any] = json.loads((FIXTURES / name).read_text())
+    return data
 
 
 class _FakeCFFIResponse:
@@ -83,7 +85,9 @@ def event_payload() -> dict[str, Any]:
 
 
 @pytest.fixture
-def install_cffi(monkeypatch: pytest.MonkeyPatch):
+def install_cffi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[dict[str, dict[str, Any]]], _RoutingCFFISession]:
     """Install a routing fake curl_cffi session for the current test."""
 
     def _install(routes: dict[str, dict[str, Any]]) -> _RoutingCFFISession:
@@ -104,7 +108,7 @@ async def test_scrape_end_to_end_ingests_rows(
     top_disciplines_payload: dict[str, Any],
     meeting_payload: dict[str, Any],
     event_payload: dict[str, Any],
-    install_cffi,
+    install_cffi: Callable[[dict[str, dict[str, Any]]], _RoutingCFFISession],
 ) -> None:
     respx.get(
         f"{EUROBET_BASE}/prematch-homepage-service/api/v2/sport-schedule"
@@ -141,7 +145,7 @@ async def test_scrape_is_idempotent_on_rerun(
     top_disciplines_payload: dict[str, Any],
     meeting_payload: dict[str, Any],
     event_payload: dict[str, Any],
-    install_cffi,
+    install_cffi: Callable[[dict[str, dict[str, Any]]], _RoutingCFFISession],
 ) -> None:
     respx.get(
         f"{EUROBET_BASE}/prematch-homepage-service/api/v2/sport-schedule"
@@ -189,7 +193,7 @@ async def test_scrape_logs_scrape_run(
     top_disciplines_payload: dict[str, Any],
     meeting_payload: dict[str, Any],
     event_payload: dict[str, Any],
-    install_cffi,
+    install_cffi: Callable[[dict[str, dict[str, Any]]], _RoutingCFFISession],
 ) -> None:
     respx.get(
         f"{EUROBET_BASE}/prematch-homepage-service/api/v2/sport-schedule"
@@ -219,7 +223,7 @@ async def test_scrape_survives_top_disciplines_failure(
     lake: Lake,
     meeting_payload: dict[str, Any],
     event_payload: dict[str, Any],
-    install_cffi,
+    install_cffi: Callable[[dict[str, dict[str, Any]]], _RoutingCFFISession],
 ) -> None:
     respx.get(
         f"{EUROBET_BASE}/prematch-homepage-service/api/v2/sport-schedule"

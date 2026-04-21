@@ -8,6 +8,7 @@ double that records requests and returns pre-canned responses.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -83,7 +84,9 @@ def _err(status: int, text: str) -> _FakeCFFIResponse:
 
 
 @pytest.fixture
-def cffi_session_factory(monkeypatch: pytest.MonkeyPatch):
+def cffi_session_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[list[_FakeCFFIResponse]], _FakeCFFISession]:
     """Return a helper that installs a pre-seeded fake curl_cffi session."""
 
     sessions: list[_FakeCFFISession] = []
@@ -210,7 +213,7 @@ async def test_400_raises_eurobet_error_without_retry() -> None:
 
 
 async def test_fetch_event_routes_through_cffi_with_tenant_headers(
-    cffi_session_factory,
+    cffi_session_factory: Callable[[list[_FakeCFFIResponse]], _FakeCFFISession],
 ) -> None:
     sess = cffi_session_factory([_ok({"code": 1, "result": {"betGroupList": []}})])
     async with EurobetClient(min_interval_s=0.0) as client:
@@ -232,7 +235,9 @@ async def test_fetch_event_routes_through_cffi_with_tenant_headers(
     assert req["params"] == {"prematch": 1, "live": 0}
 
 
-async def test_fetch_event_with_group_alias_appends_path(cffi_session_factory) -> None:
+async def test_fetch_event_with_group_alias_appends_path(
+    cffi_session_factory: Callable[[list[_FakeCFFIResponse]], _FakeCFFISession],
+) -> None:
     sess = cffi_session_factory([_ok({"code": 1, "result": {}})])
     async with EurobetClient(min_interval_s=0.0) as client:
         await client.fetch_event(
@@ -244,7 +249,9 @@ async def test_fetch_event_with_group_alias_appends_path(cffi_session_factory) -
     assert sess.requests[0]["url"].endswith("/x-y-202604242045/tutte")
 
 
-async def test_fetch_meeting_uses_cffi(cffi_session_factory) -> None:
+async def test_fetch_meeting_uses_cffi(
+    cffi_session_factory: Callable[[list[_FakeCFFIResponse]], _FakeCFFISession],
+) -> None:
     sess = cffi_session_factory([_ok({"code": 1, "result": {"dataGroupList": []}})])
     async with EurobetClient(min_interval_s=0.0) as client:
         payload = await client.fetch_meeting(
@@ -255,7 +262,9 @@ async def test_fetch_meeting_uses_cffi(cffi_session_factory) -> None:
     assert "detail-service/sport-schedule/services/meeting" in sess.requests[0]["url"]
 
 
-async def test_cffi_app_level_error_raises(cffi_session_factory) -> None:
+async def test_cffi_app_level_error_raises(
+    cffi_session_factory: Callable[[list[_FakeCFFIResponse]], _FakeCFFISession],
+) -> None:
     cffi_session_factory([_ok({"code": -99, "description": "validation error", "result": []})])
     async with EurobetClient(min_interval_s=0.0) as client:
         with pytest.raises(EurobetError) as exc:
@@ -267,7 +276,9 @@ async def test_cffi_app_level_error_raises(cffi_session_factory) -> None:
     assert exc.value.code == -99
 
 
-async def test_cffi_retries_on_503(cffi_session_factory) -> None:
+async def test_cffi_retries_on_503(
+    cffi_session_factory: Callable[[list[_FakeCFFIResponse]], _FakeCFFISession],
+) -> None:
     cffi_session_factory([_err(503, "busy"), _ok({"code": 1, "result": {"betGroupList": []}})])
     async with EurobetClient(min_interval_s=0.0, max_attempts=3) as client:
         payload = await client.fetch_event(
