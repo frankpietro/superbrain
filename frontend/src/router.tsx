@@ -15,6 +15,7 @@ import { ScrapersPage } from "@/routes/scrapers";
 import { BetsRecentPage } from "@/routes/bets-recent";
 import { ValueBetsPage } from "@/routes/value-bets";
 import { BacktestPage } from "@/routes/backtest";
+import { TrendsPage } from "@/routes/trends";
 import { SettingsPage } from "@/routes/settings";
 
 function requireAuth(path: string): void {
@@ -93,6 +94,12 @@ const backtestRoute = createRoute({
   component: BacktestPage,
 });
 
+const trendsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/trends",
+  component: TrendsPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/settings",
@@ -109,6 +116,7 @@ const routeTree = rootRoute.addChildren([
     betsIndexRoute,
     valueBetsRoute,
     backtestRoute,
+    trendsRoute,
     settingsRoute,
   ]),
 ]);

@@ -206,3 +206,44 @@ export const healthResponse = z.object({
   status: z.string(),
   version: z.string().optional(),
 });
+
+export const trendsVariabilityRowSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  series_count: z.number().int().nonnegative(),
+  observation_count: z.number().int().nonnegative(),
+  avg_cv_pct: z.number(),
+  max_cv_pct: z.number(),
+  avg_range_pct: z.number(),
+  avg_payout: z.number(),
+  leagues: z.array(z.string()),
+});
+export type TrendsVariabilityRow = z.infer<typeof trendsVariabilityRowSchema>;
+
+export const trendsVariabilityResponse = z.object({
+  group_by: z.string(),
+  since_hours: z.number().int(),
+  min_points: z.number().int(),
+  total_series: z.number().int(),
+  items: z.array(trendsVariabilityRowSchema),
+});
+export type TrendsVariabilityResponse = z.infer<typeof trendsVariabilityResponse>;
+
+export const trendsTtkBucketSchema = z.object({
+  hours_min: z.number(),
+  hours_max: z.number(),
+  n_transitions: z.number().int().nonnegative(),
+  n_series: z.number().int().nonnegative(),
+  mean_abs_delta_pct: z.number(),
+  median_abs_delta_pct: z.number(),
+  p90_abs_delta_pct: z.number(),
+  prob_any_change: z.number(),
+});
+export type TrendsTtkBucket = z.infer<typeof trendsTtkBucketSchema>;
+
+export const trendsTimeToKickoffResponse = z.object({
+  bucket_hours: z.number().int(),
+  total_transitions: z.number().int().nonnegative(),
+  buckets: z.array(trendsTtkBucketSchema),
+});
+export type TrendsTimeToKickoffResponse = z.infer<typeof trendsTimeToKickoffResponse>;

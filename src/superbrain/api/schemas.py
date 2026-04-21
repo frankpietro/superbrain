@@ -186,3 +186,53 @@ class ValueBetStub(BaseModel):
     edge: float
     bookmaker: str
     payout: float
+
+
+class TrendsVariabilityRow(BaseModel):
+    """One row of ``GET /trends/variability``.
+
+    Each row is an aggregate over a ``group_by`` bucket (market / team / match).
+    Volatility is reported as the mean coefficient of variation of the
+    underlying selection-level payout series, in percent.
+    """
+
+    key: str
+    label: str
+    series_count: int
+    observation_count: int
+    avg_cv_pct: float
+    max_cv_pct: float
+    avg_range_pct: float
+    avg_payout: float
+    leagues: list[str] = Field(default_factory=list)
+
+
+class TrendsVariabilityResponse(BaseModel):
+    """Shape returned by ``GET /trends/variability``."""
+
+    group_by: str
+    since_hours: int
+    min_points: int
+    total_series: int
+    items: list[TrendsVariabilityRow]
+
+
+class TrendsTtkBucket(BaseModel):
+    """One time-to-kickoff bucket in ``GET /trends/time-to-kickoff``."""
+
+    hours_min: float
+    hours_max: float
+    n_transitions: int
+    n_series: int
+    mean_abs_delta_pct: float
+    median_abs_delta_pct: float
+    p90_abs_delta_pct: float
+    prob_any_change: float
+
+
+class TrendsTimeToKickoffResponse(BaseModel):
+    """Shape returned by ``GET /trends/time-to-kickoff``."""
+
+    bucket_hours: int
+    total_transitions: int
+    buckets: list[TrendsTtkBucket]

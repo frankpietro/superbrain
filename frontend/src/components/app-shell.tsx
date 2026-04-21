@@ -10,6 +10,7 @@ import {
   ListOrdered,
   Receipt,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/stores/auth";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const NAV: NavLink[] = [
     ],
   },
   { to: "/backtest", label: "Backtest", icon: GanttChart },
+  { to: "/trends", label: "Trends", icon: TrendingUp },
 ];
 
 function isActive(to: string, pathname: string): boolean {
