@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { api } from "@/lib/api";
-import { LEAGUE_LABEL, leagueEnum, type League } from "@/lib/types";
+import { LEAGUE_LABEL, leagueEnum, type League, type Match } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,17 +15,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
-import { MatchesTable } from "@/components/matches-table";
+import { MatchCard } from "@/components/match-card";
 import { ErrorBanner } from "@/components/error-banner";
 import { usePreferences } from "@/stores/preferences";
+
+function defaultRange(): { from: string; to: string } {
+  const today = new Date();
+  const from = new Date(today);
+  from.setDate(from.getDate() - 15);
+  const to = new Date(today);
+  to.setDate(to.getDate() + 7);
+  return { from: toIsoDate(from), to: toIsoDate(to) };
+}
+
+function toIsoDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayIso(): string {
+  return toIsoDate(new Date());
+}
 
 export function MatchesPage() {
   const selectedLeagues = usePreferences((s) => s.selectedLeagues);
   const setSelectedLeagues = usePreferences((s) => s.setSelectedLeagues);
-  const [dateFrom, setDateFrom] = React.useState("");
-  const [dateTo, setDateTo] = React.useState("");
+  const initial = React.useMemo(defaultRange, []);
+  const [dateFrom, setDateFrom] = React.useState(initial.from);
+  const [dateTo, setDateTo] = React.useState(initial.to);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedSearch(search), 250);
@@ -33,13 +55,12 @@ export function MatchesPage() {
   }, [search]);
 
   const query = useQuery({
-    queryKey: ["matches", selectedLeagues, dateFrom, dateTo, debouncedSearch],
+    queryKey: ["matches", selectedLeagues, dateFrom, dateTo],
     queryFn: () =>
       api.listMatches({
         leagues: selectedLeagues.length ? selectedLeagues : undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
-        search: debouncedSearch || undefined,
         limit: 500,
       }),
   });
@@ -53,11 +74,16 @@ export function MatchesPage() {
 
   const leagues = leagueEnum.options;
 
+  const { upcoming, past } = React.useMemo(
+    () => partitionMatches(query.data?.items ?? [], debouncedSearch),
+    [query.data, debouncedSearch],
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Matches"
-        description="Fixture catalog across the five leagues. Click a row to see its odds grid."
+        description="Recent results and upcoming fixtures. Click a card to see stats or the latest 1X2 odds."
       />
       <Card>
         <CardHeader className="pb-3">
@@ -131,20 +157,133 @@ export function MatchesPage() {
         />
       ) : null}
 
-      <Card>
-        <CardContent className="p-0">
-          {query.isLoading ? (
-            <div className="space-y-2 p-4">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : (
-            <MatchesTable matches={query.data?.items ?? []} showKickoff={false} />
-          )}
-        </CardContent>
-      </Card>
+      {query.isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+      ) : (
+        <MatchesSections
+          upcoming={upcoming}
+          past={past}
+          expandedId={expandedId}
+          onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+        />
+      )}
     </div>
+  );
+}
+
+function partitionMatches(
+  items: Match[],
+  searchTerm: string,
+): { upcoming: Match[]; past: Match[] } {
+  const today = todayIso();
+  const needle = searchTerm.trim().toLowerCase();
+  const filtered = needle
+    ? items.filter(
+        (m) =>
+          m.home_team.toLowerCase().includes(needle) ||
+          m.away_team.toLowerCase().includes(needle),
+      )
+    : items;
+  const upcoming = filtered
+    .filter((m) => m.match_date >= today)
+    .sort((a, b) => a.match_date.localeCompare(b.match_date));
+  const past = filtered
+    .filter((m) => m.match_date < today)
+    .sort((a, b) => b.match_date.localeCompare(a.match_date));
+  return { upcoming, past };
+}
+
+function MatchesSections({
+  upcoming,
+  past,
+  expandedId,
+  onToggle,
+}: {
+  upcoming: Match[];
+  past: Match[];
+  expandedId: string | null;
+  onToggle: (id: string) => void;
+}) {
+  if (upcoming.length === 0 && past.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        No fixtures match those filters.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-8">
+      <MatchesSection
+        title="Upcoming"
+        count={upcoming.length}
+        emptyMessage="No upcoming fixtures in this range."
+        matches={upcoming}
+        variant="future"
+        expandedId={expandedId}
+        onToggle={onToggle}
+      />
+      <MatchesSection
+        title="Past"
+        count={past.length}
+        emptyMessage="No past fixtures in this range."
+        matches={past}
+        variant="past"
+        expandedId={expandedId}
+        onToggle={onToggle}
+      />
+    </div>
+  );
+}
+
+function MatchesSection({
+  title,
+  count,
+  emptyMessage,
+  matches,
+  variant,
+  expandedId,
+  onToggle,
+}: {
+  title: string;
+  count: number;
+  emptyMessage: string;
+  matches: Match[];
+  variant: "past" | "future";
+  expandedId: string | null;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <section aria-labelledby={`matches-${variant}-heading`} className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2
+          id={`matches-${variant}-heading`}
+          className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+        >
+          {title}
+          <span className="ml-2 font-normal text-muted-foreground/70">({count})</span>
+        </h2>
+      </div>
+      {matches.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {matches.map((m) => (
+            <MatchCard
+              key={m.match_id}
+              match={m}
+              variant={variant}
+              expanded={expandedId === m.match_id}
+              onToggle={() => onToggle(m.match_id)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

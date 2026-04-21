@@ -5,6 +5,7 @@ import {
   healthResponse,
   matchesResponse,
   matchSchema,
+  matchStatsResponse,
   oddsResponse,
   scrapeRunsResponse,
   scraperStatusResponse,
@@ -150,6 +151,8 @@ export const api = {
     limit?: number;
   }) => apiFetch("/matches", matchesResponse, { query: params }),
   getMatch: (id: string) => apiFetch(`/matches/${encodeURIComponent(id)}`, matchSchema),
+  getMatchStats: (id: string) =>
+    apiFetch(`/matches/${encodeURIComponent(id)}/stats`, matchStatsResponse),
   listOdds: (params: {
     match_id?: string;
     bookmaker?: string;

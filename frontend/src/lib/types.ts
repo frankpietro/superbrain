@@ -94,6 +94,8 @@ export const matchSchema = z.object({
   away_team: z.string(),
   home_goals: z.number().int().nullable().optional(),
   away_goals: z.number().int().nullable().optional(),
+  home_xg: z.number().nullable().optional(),
+  away_xg: z.number().nullable().optional(),
   kickoff_at: z.string().nullable().optional(),
   source: z.string().optional(),
 });
@@ -104,6 +106,45 @@ export const matchesResponse = z.object({
   total: z.number().int().nonnegative().optional(),
 });
 export type MatchesResponse = z.infer<typeof matchesResponse>;
+
+export const teamMatchStatsSchema = z.object({
+  team: z.string(),
+  is_home: z.boolean(),
+  goals: z.number().int().nullable().optional(),
+  goals_conceded: z.number().int().nullable().optional(),
+  ht_goals: z.number().int().nullable().optional(),
+  ht_goals_conceded: z.number().int().nullable().optional(),
+  shots: z.number().int().nullable().optional(),
+  shots_on_target: z.number().int().nullable().optional(),
+  shots_off_target: z.number().int().nullable().optional(),
+  shots_in_box: z.number().int().nullable().optional(),
+  corners: z.number().int().nullable().optional(),
+  fouls: z.number().int().nullable().optional(),
+  yellow_cards: z.number().int().nullable().optional(),
+  red_cards: z.number().int().nullable().optional(),
+  offsides: z.number().int().nullable().optional(),
+  possession_pct: z.number().nullable().optional(),
+  passes: z.number().int().nullable().optional(),
+  pass_accuracy_pct: z.number().nullable().optional(),
+  tackles: z.number().int().nullable().optional(),
+  interceptions: z.number().int().nullable().optional(),
+  aerials_won: z.number().int().nullable().optional(),
+  saves: z.number().int().nullable().optional(),
+  big_chances: z.number().int().nullable().optional(),
+  big_chances_missed: z.number().int().nullable().optional(),
+  xg: z.number().nullable().optional(),
+  xga: z.number().nullable().optional(),
+  ppda: z.number().nullable().optional(),
+  source: z.string().nullable().optional(),
+});
+export type TeamMatchStatsRow = z.infer<typeof teamMatchStatsSchema>;
+
+export const matchStatsResponse = z.object({
+  match_id: z.string(),
+  home: teamMatchStatsSchema.nullable(),
+  away: teamMatchStatsSchema.nullable(),
+});
+export type MatchStats = z.infer<typeof matchStatsResponse>;
 
 export const oddsSnapshotSchema = z.object({
   bookmaker: bookmakerEnum,

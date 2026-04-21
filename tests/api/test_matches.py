@@ -2,13 +2,39 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 
-from superbrain.core.models import League
+from superbrain.core.models import League, TeamMatchStats, compute_match_id
 from superbrain.data.connection import Lake
 from tests.api.conftest import make_match, make_snapshot, provenance
+
+
+def _team_stats(
+    *,
+    match_id: str,
+    team: str,
+    is_home: bool,
+    goals: int,
+    xg: float | None,
+    shots: int | None = None,
+    match_date: date = date(2024, 9, 1),
+    league: League = League.SERIE_A,
+) -> TeamMatchStats:
+    return TeamMatchStats(
+        match_id=match_id,
+        team=team,
+        is_home=is_home,
+        league=league,
+        season="2024-25",
+        match_date=match_date,
+        goals=goals,
+        shots=shots,
+        xg=xg,
+        source="tests",
+        ingested_at=datetime(2024, 9, 1, 10, tzinfo=UTC),
+    )
 
 
 def _seed_three_matches(lake: Lake) -> list[str]:
@@ -58,6 +84,49 @@ def test_matches_kickoff_window_filter(
     assert items[0]["home_team"] == "Inter"
 
 
+def test_matches_date_from_date_to_aliases(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    resp = client.get(
+        "/matches",
+        params={"date_from": "2024-09-08", "date_to": "2024-09-10"},
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["home_team"] == "Inter"
+
+
+def test_matches_leagues_plural_filter(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    resp = client.get(
+        "/matches",
+        params=[("leagues", "serie_a"), ("leagues", "premier_league")],
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == 3
+
+
+def test_matches_leagues_plural_overrides_singular(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    resp = client.get(
+        "/matches",
+        params=[("league", "bundesliga"), ("leagues", "premier_league")],
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [m["home_team"] for m in items] == ["Arsenal"]
+
+
 def test_matches_limit_and_cursor(
     client: TestClient, lake: Lake, auth_header: dict[str, str]
 ) -> None:
@@ -103,4 +172,73 @@ def test_match_detail_404_for_unknown_id(
 ) -> None:
     _seed_three_matches(lake)
     resp = client.get("/matches/deadbeefdeadbeef", headers=auth_header)
+    assert resp.status_code == 404
+
+
+def test_list_matches_includes_xg_when_available(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    ids = _seed_three_matches(lake)
+    target = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
+    assert target in ids
+    lake.ingest_team_match_stats(
+        [
+            _team_stats(match_id=target, team="Roma", is_home=True, goals=2, xg=1.7, shots=14),
+            _team_stats(match_id=target, team="Lazio", is_home=False, goals=1, xg=0.9, shots=10),
+        ],
+        provenance=provenance(),
+    )
+    resp = client.get("/matches", headers=auth_header)
+    assert resp.status_code == 200
+    row = next(item for item in resp.json()["items"] if item["match_id"] == target)
+    assert row["home_xg"] == 1.7
+    assert row["away_xg"] == 0.9
+    other = next(item for item in resp.json()["items"] if item["match_id"] != target)
+    assert other["home_xg"] is None
+    assert other["away_xg"] is None
+
+
+def test_match_stats_endpoint_returns_both_teams(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    target = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
+    lake.ingest_team_match_stats(
+        [
+            _team_stats(match_id=target, team="Roma", is_home=True, goals=2, xg=1.7, shots=14),
+            _team_stats(match_id=target, team="Lazio", is_home=False, goals=1, xg=0.9, shots=10),
+        ],
+        provenance=provenance(),
+    )
+    resp = client.get(f"/matches/{target}/stats", headers=auth_header)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["match_id"] == target
+    assert body["home"]["team"] == "Roma"
+    assert body["home"]["is_home"] is True
+    assert body["home"]["xg"] == 1.7
+    assert body["home"]["shots"] == 14
+    assert body["away"]["team"] == "Lazio"
+    assert body["away"]["is_home"] is False
+    assert body["away"]["xg"] == 0.9
+
+
+def test_match_stats_returns_null_sides_when_no_stats_yet(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    target = compute_match_id("Roma", "Lazio", date(2024, 9, 1), League.SERIE_A)
+    resp = client.get(f"/matches/{target}/stats", headers=auth_header)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["match_id"] == target
+    assert body["home"] is None
+    assert body["away"] is None
+
+
+def test_match_stats_404_for_unknown_match(
+    client: TestClient, lake: Lake, auth_header: dict[str, str]
+) -> None:
+    _seed_three_matches(lake)
+    resp = client.get("/matches/deadbeefdeadbeef/stats", headers=auth_header)
     assert resp.status_code == 404
