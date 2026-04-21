@@ -1,0 +1,50 @@
+# Fly.io configuration for the superbrain always-on scheduler (Phase 5).
+#
+# Sized for the Hobby / free tier: one shared-cpu-1x VM (~256 MB RAM) with a
+# small persistent volume for the Parquet lake. The scheduler is the only
+# process; the FastAPI read-side (Phase 6) ships as its own app when the
+# user promotes it out of local dev.
+
+app = "superbrain-scheduler"
+primary_region = "ams"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+dockerfile = "Dockerfile"
+
+[env]
+SUPERBRAIN_LAKE_PATH = "/data/lake"
+SUPERBRAIN_SCHEDULER_LOG_LEVEL = "INFO"
+SUPERBRAIN_SCHEDULER_BOOKMAKER_INTERVAL_MINUTES = "15"
+SUPERBRAIN_SCHEDULER_HISTORICAL_CRON = "0 4 * * mon-fri"
+SUPERBRAIN_SCHEDULER_JOB_TIMEOUT_SECONDS = "600"
+SUPERBRAIN_SCHEDULER_MAX_CONCURRENT_JOBS = "2"
+PYTHONUNBUFFERED = "1"
+PYTHONDONTWRITEBYTECODE = "1"
+
+[processes]
+scheduler = "python -m superbrain.scheduler"
+
+[[mounts]]
+source = "superbrain_data"
+destination = "/data"
+processes = ["scheduler"]
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "256mb"
+cpus = 1
+cpu_kind = "shared"
+processes = ["scheduler"]
+
+# The scheduler must run continuously; disable Fly's idle-suspend. If the
+# machine still gets halted (platform maintenance, tier quota), the GitHub
+# Actions fallback keeps the lake fresh on the 15-minute cron.
+[[services]]
+internal_port = 0
+protocol = "tcp"
+processes = ["scheduler"]
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1

@@ -1,0 +1,78 @@
+name: scheduled-scrapes
+
+on:
+  schedule:
+    # Bookmakers every 15 minutes — mirrors the Fly.io APScheduler cadence.
+    # If the Fly machine is paused or suspended, this cron keeps the lake
+    # fresh and DB-level idempotency guarantees duplicate-safe ingestion.
+    - cron: "*/15 * * * *"
+    # Daily historical backfill, 04:15 UTC (offset from the bookmakers
+    # slot so Actions never runs both jobs in the same minute).
+    - cron: "15 4 * * *"
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Subset of jobs (all|bookmakers|historical|sisal|goldbet|eurobet)"
+        required: false
+        default: "bookmakers"
+
+concurrency:
+  # A slow scrape must not queue behind itself; the 15-minute cadence is a
+  # best-effort, never a must-fire. The group name is per-schedule so the
+  # daily backfill does not cancel a bookmakers tick.
+  group: scheduled-scrapes-${{ github.event.schedule || github.event.inputs.jobs || 'manual' }}
+  cancel-in-progress: true
+
+jobs:
+  run-once:
+    name: run-once fallback
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Keep fork clones from burning Actions minutes on a cron that targets
+    # the owner's lake.
+    if: github.repository == 'frankpietro/superbrain'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.8.17"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Pick job group
+        id: group
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "jobs=${{ github.event.inputs.jobs }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "15 4 * * *" ]; then
+            echo "jobs=historical" >> "$GITHUB_OUTPUT"
+          else
+            echo "jobs=bookmakers" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run scheduler --run-once
+        env:
+          SUPERBRAIN_LAKE_PATH: ${{ github.workspace }}/data/lake
+          SUPERBRAIN_SCHEDULER_LOG_LEVEL: INFO
+        run: |
+          mkdir -p "$SUPERBRAIN_LAKE_PATH"
+          uv run python -m superbrain.scheduler \
+            --run-once --jobs "${{ steps.group.outputs.jobs }}"
+
+      - name: Upload parquet artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lake-${{ github.run_id }}-${{ steps.group.outputs.jobs }}
+          path: |
+            data/lake/**/*.parquet
+            data/lake/schema_manifest.json
+          if-no-files-found: ignore
+          retention-days: 7

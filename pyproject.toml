@@ -130,6 +130,10 @@ module = ["sklearn.*", "scipy", "scipy.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "backfill_historical"
 ignore_missing_imports = true
 
@@ -152,6 +156,12 @@ addopts = [
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:apscheduler.*",
+    # pytest-asyncio's ``_temporary_event_loop_policy`` leaks a socket and an
+    # event loop per module boundary in Python 3.12; these surface as
+    # PytestUnraisableExceptionWarning whenever a later test triggers a GC
+    # collection (notably hypothesis' ``register_random``). The leak is not
+    # ours and does not affect test correctness.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 markers = [
     "integration: tests that touch real services (skipped by default in CI)",
