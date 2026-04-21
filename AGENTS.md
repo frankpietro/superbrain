@@ -195,54 +195,94 @@ without a corresponding knowledge-log update is **incomplete**.
 Multiple agents (and/or humans) may be editing this repo **at the same
 time**. Treat every session as concurrent-by-default.
 
-### Automatic per-session branch isolation
+Branch isolation alone is not enough. If two Cursor windows open the
+same local repo path, they share one working tree even with different
+branches — `git checkout` between their branches silently clobbers the
+other agent's uncommitted edits. The fix is one **git worktree** per
+concurrent session, provisioned via `gaia session new`, which is the
+primary entry point for any parallel work in this project.
 
-This repo ships a Cursor `sessionStart` hook at
-`.cursor/hooks/auto-branch.sh` that runs when a Cursor Agent session
-opens this project:
+### First-session-on-the-repo happy path
 
-- If the session starts on a clean `main`, the hook
-  creates `agent/session-<id>-<timestamp>` and switches to it. You'll
-  see an `additional_context` message confirming the new branch.
-- If the session starts on any other branch, the hook leaves it alone
-  and surfaces the concurrency contract to you.
-- If the session starts on `main` with a dirty tree, the
-  hook **refuses** to auto-branch and asks you to inspect
-  `git status` — those uncommitted changes belong to the user or
-  another agent.
+When exactly one agent session is open on this repo, the Cursor
+`sessionStart` hook at `.cursor/hooks/auto-branch.sh` keeps working as
+before:
 
-You don't need to do anything to opt in. If you want to override,
-switch to your branch before editing and the hook will respect your
-choice on the next session.
+- Clean tree on `main` → hook creates
+  `agent/session-<id>-<ts>` and switches to it. Edit freely.
+- Any other branch → hook leaves it alone, surfaces the concurrency
+  contract.
+- Dirty tree on `main` → hook **refuses** to auto-branch
+  and asks you to inspect `git status` — those edits may not be yours.
+
+### Parallel work: one worktree per session *(mandatory when ≥2 agents)*
+
+For any concurrent work — a second Cursor window on this repo, an
+agent picking up a task while another is mid-flight, a reviewer
+alongside an implementer — **do not open a second session on the main
+checkout**. Provision a dedicated worktree:
+
+```bash
+gaia session new --slug <short-kebab-task>
+# creates ../<repo>-agents/<slug>/ on branch agent/<slug>
+# symlinks gitignored .env* secrets
+# runs .gaia/hooks/post-worktree.sh if present
+# opens a Cursor window on the worktree (if `cursor` CLI is on PATH)
+```
+
+The new Cursor window's `sessionStart` hook recognizes the worktree,
+skips auto-branching, and welcomes the agent with the session slug.
+Work, commit, push, open a PR; git's worktree primitive guarantees
+HEAD + index + tree isolation.
+
+Inspect the fleet, tear down when done:
+
+```bash
+gaia session list
+gaia session done --slug <short-kebab-task>
+```
+
+The `core/.cursor/hooks/auto-branch.sh` hook is aware of session
+worktrees. If a **new session opens on the main checkout while sibling
+worktrees are live**, the hook refuses to auto-branch and instructs
+the agent to surface the collision — the agent must stop and tell the
+user to either run `gaia session new` or wait for the siblings to
+finish.
+
+For the full recipe (secrets handling, dev-server port collisions,
+`.gaia/hooks/post-worktree.sh` pattern, teardown, monorepo caveats),
+see `.gaia/reference/patterns/agent-worktree-sessions.md`.
 
 ### The 30-second pre-flight, every session
 
-Run these four commands before you edit a single file. If any looks
+Run these commands before you edit a single file. If any looks
 suspicious, **stop and ask the user**.
 
 ```bash
-git status                                     # is the tree dirty?
-git rev-parse --abbrev-ref HEAD                # what branch am I on?
-git log --oneline origin/main..HEAD   # unmerged commits?
-gh pr list --state open --limit 20             # what else is in flight?
+git rev-parse --git-common-dir                     # am I in a session worktree?
+git status                                         # is the tree dirty?
+git rev-parse --abbrev-ref HEAD                    # what branch am I on?
+git log --oneline origin/main..HEAD  # unmerged commits?
+gh pr list --state open --limit 20                 # what else is in flight?
+gaia session list                                  # what sibling sessions are live?
 ```
 
 Decision table:
 
 | What you see                                               | Do this                                                                                                                   |
 |------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| Clean tree, on `main`                        | Great. Create your own branch before editing.                                                                             |
-| Clean tree, on some other branch                           | That branch may be someone else's. Switch to `main`, pull, then create your own branch. Never pile commits on a shared branch. |
-| Dirty tree, on any branch                                  | **STOP.** Those edits may not be yours. Ask the user before doing anything. See *Recovery* below.                         |
-| Your own in-progress work on the branch you created        | Fine, continue.                                                                                                           |
+| Inside a `<repo>-agents/<slug>/` worktree on `agent/<slug>`| You're in a Gaia session worktree. Edit freely; isolation is already handled.                                            |
+| Main checkout, clean tree on `main`, no siblings | Hook auto-branched you on `agent/session-*`. Fine; continue.                                                          |
+| Main checkout, clean tree on `main`, **sibling sessions live** | **STOP.** Hook refused to auto-branch. Tell the user to run `gaia session new` or wait.                       |
+| Clean tree, on some other branch (main checkout)           | That branch may be someone else's. Switch to `main`, pull, then `gaia session new`. Never pile commits on a shared branch. |
+| Dirty tree, on any branch                                  | **STOP.** Those edits may not be yours. Ask the user. See *Recovery* below.                                              |
+| Your own in-progress work on a session branch              | Fine, continue.                                                                                                           |
 | An open PR already touches files you plan to edit          | Either wait for it to merge, or coordinate (see *Coordinating overlapping work* below).                                   |
 
-### Start your own isolated worktree (recommended for parallel work)
+### Manual worktree fallback
 
-The safest way to run multiple agents in parallel is one **git
-worktree** per agent — a separate directory that shares the same
-`.git` but has its own files, branch, and state. One editor window per
-worktree. Agents cannot see each other's unsaved edits.
+If `gaia` is not on PATH or the project is not yet Gaia-seeded, the
+raw git commands are:
 
 ```bash
 git fetch origin
@@ -324,10 +364,12 @@ four agents racing. When going parallel is genuinely warranted:
 
 - Land shared scaffolding (types, routing skeletons, shared
   components) in a first PR that every parallel slice depends on.
-- One worktree per slice; dev servers bind a port, so run only one
-  at a time.
+- One `gaia session new` per slice; dev servers bind a port, so only
+  one session runs the dev server (parametrize the port via
+  `.gaia/hooks/post-worktree.sh` if you need more).
 - Make each slice truly independent — two agents on the same module
-  at the same time is a guaranteed merge conflict.
+  at the same time is a guaranteed merge conflict, even with
+  perfect tree isolation.
 
 ---
 

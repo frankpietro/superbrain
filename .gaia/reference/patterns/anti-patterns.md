@@ -146,6 +146,29 @@ Alternatives considered.
 
 ---
 
+## Branch-only isolation for concurrent AI agents
+
+**Seen as**: multiple Cursor (or Claude Code, Codex, …) agent
+sessions opened on the same local repo, each auto-branching into its
+own `agent/*` branch but sharing one working tree. The
+`sessionStart` hook happily branches both; `git checkout` between
+their branches silently clobbers the other agent's uncommitted work.
+
+**Cost**: agents stash each other's edits; recovery requires
+digging through `git stash list` to identify whose stash is whose;
+files "mysteriously revert" mid-session. The symptom set is known
+colloquially as "agents mixing files".
+
+**Alternative**: one git worktree per concurrent agent session,
+provisioned via `gaia session new`. Git's worktree primitive gives
+HEAD + index + working-tree isolation; the shared `.git/objects`
+keeps the disk cost low. See
+`patterns/agent-worktree-sessions.md`. The `core/.cursor/hooks/auto-branch.sh`
+hook refuses to auto-branch the main tree when sibling session
+worktrees are already live.
+
+---
+
 ## Pushing directly to `main` to "fix CI"
 
 **Seen as**: bypassing branch protection, committing a "hotfix" to

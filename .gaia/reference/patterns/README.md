@@ -117,6 +117,9 @@ full list. Indicative entries at the time of writing:
   runtime versions.
 - `secrets-via-env-only.md` — the twelve-factor "config from env"
   pattern, with the small-project escape hatch.
+- `agent-worktree-sessions.md` — one git worktree per concurrent AI
+  agent, so parallel agents stop clobbering each other's working
+  tree.
 - `anti-patterns.md` — named things NOT to do, with the reasoning.
 
 ## Adding a pattern
