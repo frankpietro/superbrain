@@ -96,7 +96,7 @@ zustand, and `react-plotly.js`. Quick start:
 cd frontend
 cp .env.example .env.local        # set VITE_API_BASE_URL=http://localhost:8000
 npm install
-npm run dev                       # http://localhost:5173
+npm run dev                       # http://localhost:5273
 ```
 
 CI runs `lint`, `typecheck`, unit tests, and a production `build` on every

@@ -16,7 +16,7 @@ React SPA for the three owners. Reads from the Phase-6 FastAPI backend.
 
 ```bash
 npm install
-npm run dev        # Vite dev server on :5173
+npm run dev        # Vite dev server on :5273 (strict, fails loudly if busy)
 npm run build      # typecheck + production bundle in dist/
 npm run preview    # preview built bundle
 npm run test       # Vitest (watch mode)
