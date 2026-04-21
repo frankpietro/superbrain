@@ -1,0 +1,44 @@
+---
+description: docs/knowledge.md is the source of truth. Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# The living log — at-hand reference
+
+Full protocol: `AGENTS.md` → *Read the knowledge first*.
+
+Two knowledge files at the project root:
+
+- `docs/brief.md` — original brief, immutable.
+- `docs/knowledge.md` — living log; every decision, convention,
+  gotcha, glossary term, dated `YYYY-MM-DD`.
+
+## Authority order
+
+```
+training data  <  docs/brief.md  <  docs/knowledge.md  <  user in this chat
+```
+
+If the user contradicts the log in this chat, do the user's bidding
+**and** update the log in the same PR.
+
+## Every session
+
+Read `docs/knowledge.md` before editing. Skim the Index, focus on
+the sections touching your task.
+
+## Every non-trivial PR
+
+Update `docs/knowledge.md` in the same PR when the change
+introduces any of: a new decision (even an agent-chosen default), a
+new convention, a new gotcha that cost >10 min to debug, a new
+domain term, or invalidates a prior entry (strike-through, don't
+delete).
+
+Cosmetic-only PRs (typo, format) are exempt. Short entries, dated,
+grep-able. Link to PRs/files, don't paste.
+
+## If the learning is generalizable
+
+Prefix the entry with `GENERAL:` and stage an outbox entry — see
+`gaia-sync.mdc`. The pre-push hook reminds you.

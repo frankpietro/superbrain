@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.tox/
+
+# uv / virtualenv
+.venv/
+venv/
+.python-version
+
+# Jupyter / notebooks (archetype rule: never commit .ipynb)
+*.ipynb
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+
+# Data lake (gitignored; authoritative lake lives on the Fly volume
+# and is backed up to the data-snapshots branch, not main)
+data/lake/
+data/*.duckdb
+data/*.duckdb.wal
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Playwright
+playwright-report/
+test-results/

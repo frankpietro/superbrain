@@ -1,0 +1,29 @@
+---
+description: Own CI until the first post-merge run on the default branch is green. Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# Shipping ≠ merging — at-hand reference
+
+Full rule: `AGENTS.md` → *Shipping is not done when the PR is
+merged*.
+
+A merged-but-broken PR is a broken ship. After every merge:
+
+1. **Wait for the PR's checks.** `gh pr checks <n>` (or
+   `gh pr view <n> --json statusCheckRollup`) until all required
+   checks finish. Auto-merge does not mean CI has passed.
+2. **Verify the post-merge run** on `main`:
+   `gh run list --branch main --limit 5`. Wait if
+   `in_progress`.
+3. **If red, YOU fix it — same session, new PR.** Even if the
+   failure looks unrelated or flaky, treat it as yours until proven
+   otherwise. Read logs with `gh run view <run-id> --log-failed`.
+   Repeat until `main` is green.
+4. **Never silence checks.** No `--no-verify`, no disabled
+   workflows, no skipped tests to get green. Genuinely flaky tests
+   are marked the way the project already handles flakes; surface
+   the flake to the user.
+
+If shipping multiple PRs, complete the watch-and-fix loop for PR N
+before starting PR N+1.

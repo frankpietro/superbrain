@@ -1,0 +1,101 @@
+{
+  "gaia_url": "https://github.com/frankpietro/gaia",
+  "gaia_commit": "7fa3ba21e888df23b9e8febc1874d5315e326809",
+  "seeded_at": "2026-04-21T14:11:23Z",
+  "archetype": "data-pipeline",
+  "project_name": "superbrain",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "83d22b23f9d44ae79ccf03431964469c8522ff2663b37932d9df53760a5ce188"
+    },
+    {
+      "path": ".gitmessage",
+      "sha256": "2d57a748609c4480253bb3710ceadf123dd6c4a8fd3bee17b19597326d8e09f3"
+    },
+    {
+      "path": "scripts/setup-hooks.sh",
+      "sha256": "5416451f3c74154299a150bb00d681b8c55a2f88898038d52209a953fe75e126"
+    },
+    {
+      "path": ".cursor/hooks/auto-branch.sh",
+      "sha256": "8c61dad03c05e36de3c59a2257c1c6e326d815a8cd3e8eca6213b846980cc50b"
+    },
+    {
+      "path": ".cursor/hooks.json",
+      "sha256": "9ea819b90eca4418313c0ca18672f977a5e24ce97ced5da90228e06f719dfac1"
+    },
+    {
+      "path": ".cursor/rules/pr-ci-responsibility.mdc",
+      "sha256": "0708a071e876ed13a118d283ab0f866af42b6bb1fc0f57dfa86e0096e8c7205b"
+    },
+    {
+      "path": ".cursor/rules/knowledge-log.mdc",
+      "sha256": "4420d754acf19ebffa456c35a81647c02595f549cef60fb6be1a8e9f079df327"
+    },
+    {
+      "path": ".cursor/rules/git-workflow.mdc",
+      "sha256": "300744c6f54f636e97c01541532bf3e6232f03b94521d22da2e8ed827a6f2ecf"
+    },
+    {
+      "path": ".cursor/rules/concurrency.mdc",
+      "sha256": "0350b4c5fc16d1da811ae1b5ae9b56b73a627d38501a334c7e6f400ca8b2c1ab"
+    },
+    {
+      "path": ".cursor/rules/gaia-sync.mdc",
+      "sha256": "ec1478b1c29baf969a72d75e2e0ea1d2dc38c2ce9a151d5c3b30a76475a0e9ff"
+    },
+    {
+      "path": ".githooks/commit-msg",
+      "sha256": "e641b857318d25161d78dad1b47f0f25f35acdd2252d235a2f6efcf0689aa7f8"
+    },
+    {
+      "path": ".githooks/pre-push",
+      "sha256": "43aca50ad9ce14f4f6e1bf699e5cf91895b9d692caacde296b372543171339cf"
+    },
+    {
+      "path": ".gaia/reference/patterns/README.md",
+      "sha256": "84f064cf7cf48d243464d1c088846066976ad59ef918deb2d45f40b52ff76825"
+    },
+    {
+      "path": ".gaia/reference/patterns/ci-matrix-strategy.md",
+      "sha256": "f2b6250a083f07a01ef393393603ea514ae4b2c5f930492676442ec071dd3559"
+    },
+    {
+      "path": ".gaia/reference/patterns/zero-downtime-migrations.md",
+      "sha256": "346285fafcf371e34bf4a4ebcfa4cd6922f57ae36724a9df29e5ab2bea221540"
+    },
+    {
+      "path": ".gaia/reference/patterns/anti-patterns.md",
+      "sha256": "0f99a45d772f83a44fac4d4663c52c595ffb993635e8de094542199d3761b480"
+    },
+    {
+      "path": ".gaia/reference/archetypes/multi-tenant-saas.md",
+      "sha256": "974f9a70189dc9457ff943f1cdd06976f3fead9b396aafe1d39c756a534eff18"
+    },
+    {
+      "path": ".gaia/reference/archetypes/data-pipeline.md",
+      "sha256": "f6265b8e9a5239d7f6fe744412c9eea7aad69204fe70e6ef268e41c0f63898f5"
+    },
+    {
+      "path": ".gaia/reference/archetypes/cli-tool.md",
+      "sha256": "2be1eed3e7a6296e139176bad054cc7e41e017546122b45d4ef2da7bca7fd630"
+    },
+    {
+      "path": ".gaia/reference/archetypes/personal-web-spa.md",
+      "sha256": "4cb518f1018484f59605d15a774d4f4ec26618af2f5dcdafb2751113f7caa33b"
+    },
+    {
+      "path": ".gaia/reference/README.md",
+      "sha256": "0c2c8cdcf09b6f7048ea9be38fdf103467244edf81aa809eb7573aa243a2d997"
+    },
+    {
+      "path": ".gaia/reference/exemplars.md",
+      "sha256": "e5cbcedb0adf3dcc871b3f260ddb36f48776a2664bfc0abc7137562a743f1674"
+    },
+    {
+      "path": ".gaia/reference/preferences.md",
+      "sha256": "484548fbfa2774c9a3a41bae0dee22fdadf76d013fcb056618af5ab0a4d16e45"
+    }
+  ]
+}

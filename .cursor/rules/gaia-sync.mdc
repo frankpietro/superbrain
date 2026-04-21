@@ -1,0 +1,81 @@
+---
+description: Gaia pull via gaia update, push via the outbox (never a direct cross-repo PR). Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# This project uses Gaia — at-hand reference
+
+Full contract: `AGENTS.md` → *About Gaia*. See also
+`docs/HOW_TO_PROMOTE.md` in the Gaia repo.
+
+Seeded from **Gaia** (https://github.com/frankpietro/gaia). `.gaia/manifest.json` records
+the exact Gaia commit this project is on.
+
+## Pull from Gaia
+
+The sessionStart hook injects a freshness note into your opening
+context if this project is behind upstream. You can also run:
+
+```bash
+gaia check        # fast, local: is this project behind?
+gaia whatsnew     # what changed in core/ and reference/
+gaia update       # re-seed; preserves local edits; never touches docs/
+gaia sync         # fetch + ff-only pull inside $GAIA_HOME
+```
+
+**"Behind" protocol**: reconcile conflicts against
+`docs/knowledge.md` first (project-local decisions win, record the
+override), then `gaia update`, then ship a dedicated
+`chore(gaia): bump to <short-sha>` PR.
+
+## Push to Gaia — outbox only, never from this chat
+
+**Never open a PR against Gaia from this session.** Upstream
+promotions run in a dedicated Cursor chat opened against the Gaia
+repo. From here, *stage* the proposal:
+
+1. Add the learning to `docs/knowledge.md` with a `GENERAL:` prefix.
+2. Queue it in the outbox:
+
+   ```bash
+   gaia outbox add \
+     --tier core \
+     --target core/AGENTS.md \
+     --title "<short headline>" \
+     --body "Why + what to change + links"
+   ```
+
+   Tiers: `core` (universal rule), `reference` (preference or
+   archetype tweak), `archetype:<name>` (specific archetype).
+3. Commit `.gaia/outbox.md` with the rest of the PR. Mention it in
+   the PR body so the user knows to drain soon.
+
+## Where knowledge belongs
+
+| Scope | Where it goes |
+|---|---|
+| Specific to *this* project only | `docs/knowledge.md` |
+| Any Gaia-seeded project would benefit | `docs/knowledge.md` with `GENERAL:` + outbox entry |
+| Named, reusable technical recipe | `docs/knowledge.md` + outbox entry, target `reference/patterns/<slug>.md` |
+
+When in doubt, start in `docs/knowledge.md`. If the same learning
+appears a second time in a different project, queue it.
+
+## Patterns — consult before inventing
+
+Before tackling cross-cutting concerns (CI setup, migrations,
+secret rotation, feature flags, logging, Dockerfile, release):
+
+```bash
+ls .gaia/reference/patterns/
+```
+
+If a filename matches, read it before reinventing. A recipe needed
+twice across projects → queue a `reference`-tier outbox entry
+proposing a new pattern file.
+
+## Never edit
+
+- `.gaia/manifest.json` — managed by `gaia update`.
+- `.gaia/reference/` — seeded Tier-2 snapshot; change upstream via
+  the outbox.

@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: lint + typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.8.17"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy src tests
+
+      - name: Pytest
+        run: uv run pytest --cov=superbrain --cov-report=term-missing
+
+  # A `gaia doctor` CI job will return once a PAT with read access to the
+  # (private) https://github.com/frankpietro/gaia repo is available as a
+  # repository secret. Until then, `gaia doctor` runs locally via the
+  # pre-push hook (`.githooks/pre-push`) and the Cursor session-start hook
+  # (`.cursor/hooks/auto-branch.sh`), which is enough coverage.

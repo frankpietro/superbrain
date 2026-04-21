@@ -1,0 +1,26 @@
+---
+description: Git, commit and PR contract. Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# Git workflow — at-hand reference
+
+Full contract: `AGENTS.md` → *Branching, commits, PRs*.
+
+- **Never** push to `main`, force-push, disable branch
+  protection, or pass `--no-verify`.
+- Branch: `<type>/<short-kebab-subject>` (e.g. `feat/trail-filter`).
+- Commit subject matches
+  `^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._-]+\))?!?: .{1,100}$`
+  and carries the trailer
+  `Co-authored-by: Cursor Agent <cursoragent@cursor.com>`.
+- One logical change per commit. One user-visible change per PR.
+- PR body uses plain `-` bullets only. **Never** `- [ ]` / `- [x]` —
+  unticked boxes freeze the merged PR at `X of Y tasks` forever.
+- Run the project's lint / typecheck / test commands (see
+  `docs/knowledge.md` → Architecture) before opening a PR.
+- Dependencies: one package manager per project; commit lockfiles;
+  never hand-edit them. Defaults in
+  `.gaia/reference/preferences.md`.
+- On a fresh clone, `scripts/setup-hooks.sh` wires the commit
+  template and hooks path.
