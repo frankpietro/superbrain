@@ -94,7 +94,7 @@ zustand, and `react-plotly.js`. Quick start:
 
 ```bash
 cd frontend
-cp .env.example .env.local        # set VITE_API_BASE_URL=http://localhost:8000
+cp .env.example .env.local        # set VITE_API_BASE_URL=http://localhost:8100
 npm install
 npm run dev                       # http://localhost:5273
 ```

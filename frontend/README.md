@@ -31,7 +31,7 @@ npm run format     # Prettier write
 Copy `.env.example` to `.env.local`:
 
 ```
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8100
 ```
 
 Bearer tokens are entered at `/login` and persisted to `localStorage` under
@@ -79,7 +79,7 @@ models (`Match`, `OddsSnapshot`, `ScrapeRun`, …). Once the Phase-6 backend
 exposes a stable `/openapi.json`, regenerate with:
 
 ```bash
-npx openapi-typescript http://localhost:8000/openapi.json -o src/lib/api-types.ts
+npx openapi-typescript http://localhost:8100/openapi.json -o src/lib/api-types.ts
 ```
 
 and migrate `types.ts` to reference the generated types.

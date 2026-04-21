@@ -37,7 +37,7 @@ export function getBaseUrl(): string {
   const url = import.meta.env.VITE_API_BASE_URL;
   if (!url) {
     // Default for local dev; still explicit so CI-time misconfiguration is obvious.
-    return "http://localhost:8000";
+    return "http://localhost:8100";
   }
   return url.replace(/\/$/, "");
 }
