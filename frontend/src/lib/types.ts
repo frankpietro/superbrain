@@ -288,3 +288,53 @@ export const trendsTimeToKickoffResponse = z.object({
   buckets: z.array(trendsTtkBucketSchema),
 });
 export type TrendsTimeToKickoffResponse = z.infer<typeof trendsTimeToKickoffResponse>;
+
+export const backtestRunRequestSchema = z.object({
+  league: z.string(),
+  season: z.string(),
+  market: z.string().nullable().optional(),
+  edge_cutoff: z.number(),
+  threshold: z.number().nullable().optional(),
+  stake: z.number(),
+  min_history_matches: z.number().int(),
+  n_clusters: z.number().int().nullable().optional(),
+});
+
+export const backtestBetRowSchema = z.object({
+  match_id: z.string(),
+  match_date: z.string(),
+  home_team: z.string(),
+  away_team: z.string(),
+  market: z.string(),
+  selection: z.string(),
+  bookmaker: z.string(),
+  decimal_odds: z.number(),
+  model_probability: z.number(),
+  edge: z.number(),
+  stake: z.number(),
+  won: z.boolean().nullable(),
+  payout: z.number(),
+  profit: z.number(),
+});
+export type BacktestBetRow = z.infer<typeof backtestBetRowSchema>;
+
+export const backtestSummarySchema = z.object({
+  n_bets: z.number().int(),
+  n_wins: z.number().int(),
+  n_losses: z.number().int(),
+  n_unresolved: z.number().int(),
+  total_stake: z.number(),
+  total_profit: z.number(),
+  roi: z.number(),
+  hit_rate: z.number(),
+  sharpe: z.number(),
+});
+export type BacktestSummary = z.infer<typeof backtestSummarySchema>;
+
+export const backtestRunResponseSchema = z.object({
+  request: backtestRunRequestSchema,
+  fixtures_considered: z.number().int(),
+  summary: backtestSummarySchema,
+  bets: z.array(backtestBetRowSchema),
+});
+export type BacktestRunResponse = z.infer<typeof backtestRunResponseSchema>;

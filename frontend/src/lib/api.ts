@@ -2,6 +2,7 @@ import { z, type ZodType } from "zod";
 import { sanitizeBearerToken } from "@/lib/auth-token";
 import { getAuthToken, useAuth } from "@/stores/auth";
 import {
+  backtestRunResponseSchema,
   healthResponse,
   matchesResponse,
   matchSchema,
@@ -191,17 +192,11 @@ export const api = {
   runBacktest: (body: {
     league: string;
     season: string;
-    market: string;
+    market?: string;
     threshold?: number;
     edge_cutoff?: number;
-  }) =>
-    apiFetch(
-      "/backtest/run",
-      z.object({
-        job_id: z.string().optional(),
-        status: z.string().optional(),
-        detail: z.string().optional(),
-      }),
-      { method: "POST", body },
-    ),
+    stake?: number;
+    min_history_matches?: number;
+    n_clusters?: number;
+  }) => apiFetch("/backtest/run", backtestRunResponseSchema, { method: "POST", body }),
 };
