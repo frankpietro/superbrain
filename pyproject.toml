@@ -147,6 +147,7 @@ disable_error_code = ["import-not-found"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = [
     "-ra",

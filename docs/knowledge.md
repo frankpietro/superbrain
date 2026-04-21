@@ -444,14 +444,21 @@ Tests (5 in `tests/ablation/test_feature_ablation.py`) cover:
 4. `test_read_ablation_runs_filters_by_bet` — DuckDB glob read filters by bet_code and returns an empty frame for missing bets.
 5. `test_empty_feature_universe_raises` — a <2-column universe raises `ValueError`.
 
-### Golden regression corpus TODO (phase 4b, 2026-04-21)
+### Golden regression corpus (phase 4c, 2026-04-21)
 
-Deferred to a dedicated `feat(engine): golden regression corpus` PR. The blocker is shape translation, not algorithmic equivalence:
+Shipped as a **main-forward** corpus rather than a legacy-equivalence one. Rationale: the old `fbref24` pipeline is in pandas and keyed differently; a true bit-for-bit comparison against legacy would require a shape translator that we'd throw away once the comparison was done. The useful property — *"the engine's output does not silently drift"* — is better served by freezing the current pipeline's output on a deterministic synthetic slice and gating future changes against that snapshot.
 
-- `fbref24/refactored_src/engine/pipeline.py` takes pandas DataFrames keyed by `(league, season, date, team, opponent)` and returns dicts of (dict of pandas). Our new lake materialises polars frames keyed by `(league, season, match_id, is_home)`.
-- The adapter needed is a reader that (a) pulls our lake's Serie A 2023-24 first-20-matchday slice, (b) projects the row schema into the old pandas shape (flatten `team`/`opponent`/`is_home` into the old `(HomeTeam, AwayTeam, HomeGoals, AwayGoals, HomeStat, AwayStat, …)` wide format), and (c) feeds that into the old pipeline.
-- Output capture needs mirror code: legacy returns pandas DataFrames, we store polars + a SHA256 of the flattened bytes; either we convert on the fly at snapshot time, or we freeze both representations.
-- Scope: 1 file of translation code (~150 lines), 1 script (`scripts/generate_engine_golden.py`), 1 test (`tests/engine/test_regression.py`) asserting `abs(new - old) <= 1e-6` on probabilities and exact equality on cluster partitions. Estimate: a single focused PR once the translator is written.
+- `scripts/generate_engine_golden.py` seeds an in-memory lake via the same recipe as `tests/engine/test_pipeline.py::twenty_match_lake` (6 teams, 20 round-robin matches, deterministic RNG seed 7, `PricingConfig(n_clusters=3, ProbabilityConfig(quantile=0.5, min_matches=3))`), runs `build_engine_context` → `price_fixture` → `find_value_bets` on a held-out 21st fixture across goals/corners/1X2/BTTS, and writes a stable JSON to `tests/engine/fixtures/golden/engine_pipeline.json`.
+- The golden payload freezes:
+  1. The **cluster partition** as a SHA-256 over the cluster-id-permutation-invariant canonical form (teams sorted alphabetically inside each cluster, clusters sorted by first member). Legitimate cluster-id relabellings don't trip the test; partition drift does.
+  2. The **similarity matrix** as a SHA-256 over the key-sorted, 12-decimal-rounded float64 bytes. Key-ordering-invariant.
+  3. The **priced outcomes** (9 rows) as a sorted list of `(market, selection, params, target_columns, sample_size, model_probability, model_payout)` with probabilities rounded to 12 decimals.
+  4. The **value bets** (4 rows at `edge_threshold=0`) as a sorted list of `(market, selection, bookmaker, params, decimal_odds, book_probability, model_probability, edge)`.
+- `tests/engine/test_regression.py` rebuilds the corpus from scratch (fresh `tmp_path`, no I/O shortcuts) and asserts equality against the frozen JSON. Two extra sanity tests guard the invariance helpers themselves (cluster-id permutation, similarity key reordering).
+- Pytest exposes `scripts/` on the path via `pythonpath = ["."]` in `[tool.pytest.ini_options]`; the test imports `from scripts.generate_engine_golden import build_corpus, …` directly, keeping the library code in one place rather than forking it into `tests/`.
+- To accommodate an intentional algorithmic change, regenerate with `uv run python scripts/generate_engine_golden.py` and commit the refreshed JSON alongside the change; the diff on `engine_pipeline.json` is reviewable line-by-line.
+
+Legacy-equivalence comparison is *not* deferred — it's retired. If we ever want it, the shape translator described in the phase 4b TODO is still the right design, but it's now a future-optional exercise, not a blocker.
 
 ### Dev environment
 
@@ -788,8 +795,8 @@ Items that will be decided as phases land:
   1. ~~**Golden regression corpus.**~~ **Deferred 2026-04-21 to a dedicated PR.** See *Golden regression corpus TODO (phase 4b, 2026-04-21)* for the adapter; blocked on the pandas↔Polars shape mismatch documented there.
   2. ~~**End-to-end backtest + integration + no-leakage tests.**~~ **Shipped 2026-04-21** as `tests/engine/test_pipeline.py` + `tests/engine/test_backtest.py` (see *Ablation and engine tests (phase 4b, 2026-04-21)*).
   3. ~~**Per-strategy bet unit tests.**~~ **Shipped 2026-04-21** as `tests/engine/test_bets.py` covering all 13 registered strategies.
-- **Phase 4c follow-ups** (2026-04-21, newly opened by phase 4b):
-  1. Golden regression corpus (see the TODO section cited above).
+- ~~**Phase 4c follow-ups** (2026-04-21, newly opened by phase 4b):~~
+  1. ~~Golden regression corpus.~~ **Shipped 2026-04-21** as `scripts/generate_engine_golden.py` + `tests/engine/test_regression.py` + `tests/engine/fixtures/golden/engine_pipeline.json`. See *Golden regression corpus (phase 4c, 2026-04-21)*.
   2. API + SPA surface for ablation runs. Backend: `GET /ablation/runs?bet=...` streams `data/ablation_runs/<bet>/*.parquet` via DuckDB; `POST /ablation/studies` kicks off a backgrounded `FeatureAblationStudy.run(...)`. Frontend: drop the result table next to the backtest screen; no write path today because the Python class is the only entry point.
   3. Beam / genetic search extensions to `FeatureAblationStudy`. Hooks are documented in the class docstring; swap `_search` and use the `seed` attribute for your RNG.
 

@@ -1,0 +1,184 @@
+{
+  "cluster_partition_checksum": "dbd25cf0a43a133f2f0185f33730a2dd2e939d3e11963dff3de96d7399aff1f2",
+  "config": {
+    "edge_threshold": 0.0,
+    "feature_columns": [
+      "goals",
+      "goals_conceded",
+      "shots",
+      "shots_on_target",
+      "corners",
+      "yellow_cards",
+      "fouls"
+    ],
+    "min_history_matches": 30,
+    "min_matches": 3,
+    "n_clusters": 3,
+    "quantile": 0.5,
+    "rng_seed": 7
+  },
+  "fixture": {
+    "away_team": "Echo",
+    "home_team": "Charlie",
+    "league": "serie_a",
+    "match_date": "2023-10-03",
+    "match_id": "80d73d18905383fe",
+    "season": "2023-24"
+  },
+  "priced_outcomes": [
+    {
+      "market": "corner_total",
+      "model_payout": 4.0,
+      "model_probability": 0.25,
+      "params": {
+        "threshold": 9.5
+      },
+      "sample_size": 4,
+      "selection": "OVER",
+      "target_columns": [
+        "corners"
+      ]
+    },
+    {
+      "market": "corner_total",
+      "model_payout": 1.333333333333,
+      "model_probability": 0.75,
+      "params": {
+        "threshold": 9.5
+      },
+      "sample_size": 4,
+      "selection": "UNDER",
+      "target_columns": [
+        "corners"
+      ]
+    },
+    {
+      "market": "goals_both_teams",
+      "model_payout": 10000.0,
+      "model_probability": 0.0,
+      "params": {},
+      "sample_size": 4,
+      "selection": "NO",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "goals_both_teams",
+      "model_payout": 1.0,
+      "model_probability": 1.0,
+      "params": {},
+      "sample_size": 4,
+      "selection": "YES",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "goals_over_under",
+      "model_payout": 1.0,
+      "model_probability": 1.0,
+      "params": {
+        "threshold": 2.5
+      },
+      "sample_size": 4,
+      "selection": "OVER",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "goals_over_under",
+      "model_payout": 10000.0,
+      "model_probability": 0.0,
+      "params": {
+        "threshold": 2.5
+      },
+      "sample_size": 4,
+      "selection": "UNDER",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "match_1x2",
+      "model_payout": 4.0,
+      "model_probability": 0.25,
+      "params": {},
+      "sample_size": 4,
+      "selection": "1",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "match_1x2",
+      "model_payout": 2.0,
+      "model_probability": 0.5,
+      "params": {},
+      "sample_size": 4,
+      "selection": "2",
+      "target_columns": [
+        "goals"
+      ]
+    },
+    {
+      "market": "match_1x2",
+      "model_payout": 4.0,
+      "model_probability": 0.25,
+      "params": {},
+      "sample_size": 4,
+      "selection": "X",
+      "target_columns": [
+        "goals"
+      ]
+    }
+  ],
+  "similarity_matrix_checksum": "f3abc1019ced37f968b37182af1ce84a92ef9817b14ae48be268ae9d296f6b50",
+  "value_bets": [
+    {
+      "book_probability": 0.5,
+      "bookmaker": "sisal",
+      "decimal_odds": 2.0,
+      "edge": 0.25,
+      "market": "corner_total",
+      "model_probability": 0.75,
+      "params": {
+        "threshold": 9.5
+      },
+      "selection": "UNDER"
+    },
+    {
+      "book_probability": 0.571428571429,
+      "bookmaker": "sisal",
+      "decimal_odds": 1.75,
+      "edge": 0.428571428571,
+      "market": "goals_both_teams",
+      "model_probability": 1.0,
+      "params": {},
+      "selection": "YES"
+    },
+    {
+      "book_probability": 0.540540540541,
+      "bookmaker": "sisal",
+      "decimal_odds": 1.85,
+      "edge": 0.459459459459,
+      "market": "goals_over_under",
+      "model_probability": 1.0,
+      "params": {
+        "threshold": 2.5
+      },
+      "selection": "OVER"
+    },
+    {
+      "book_probability": 0.333333333333,
+      "bookmaker": "sisal",
+      "decimal_odds": 3.0,
+      "edge": 0.166666666667,
+      "market": "match_1x2",
+      "model_probability": 0.5,
+      "params": {},
+      "selection": "2"
+    }
+  ]
+}
