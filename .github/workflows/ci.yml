@@ -39,23 +39,8 @@ jobs:
       - name: Pytest
         run: uv run pytest --cov=superbrain --cov-report=term-missing
 
-  gaia:
-    name: gaia doctor
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone Gaia
-        run: git clone --depth 1 https://github.com/frankpietro/gaia.git "$HOME/.gaia"
-
-      - name: Symlink gaia CLI
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          ln -s "$HOME/.gaia/gaia" "$HOME/.local/bin/gaia"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Wire hooks
-        run: ./scripts/setup-hooks.sh
-
-      - name: Run gaia doctor
-        run: gaia doctor
+  # A `gaia doctor` CI job will return once a PAT with read access to the
+  # (private) https://github.com/frankpietro/gaia repo is available as a
+  # repository secret. Until then, `gaia doctor` runs locally via the
+  # pre-push hook (`.githooks/pre-push`) and the Cursor session-start hook
+  # (`.cursor/hooks/auto-branch.sh`), which is enough coverage.

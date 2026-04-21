@@ -258,6 +258,7 @@ Items that will be decided as phases land:
 - Whether to keep the Fly volume as the authoritative lake or move to Cloudflare R2.
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
+- **CI `gaia doctor` job** — disabled in CI (2026-04-21) because Gaia is a private repo and the job can't clone it without a PAT. Re-enable by adding a `GAIA_READ_PAT` repository secret and restoring the `gaia` job in `.github/workflows/ci.yml`. Local coverage via the pre-push hook and the Cursor session-start hook is adequate in the interim.
 
 ---
 
