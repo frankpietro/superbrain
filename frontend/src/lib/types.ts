@@ -1,0 +1,197 @@
+// Types hand-written from the phase-1/phase-3 pydantic models
+// (`superbrain.core.models` and `superbrain.core.markets`).
+// TODO(phase-7): replace with `openapi-typescript` output once the
+// Phase-6 backend exposes a stable `/openapi.json`.
+
+import { z } from "zod";
+
+export const leagueEnum = z.enum([
+  "serie_a",
+  "premier_league",
+  "la_liga",
+  "bundesliga",
+  "ligue_1",
+]);
+export type League = z.infer<typeof leagueEnum>;
+
+export const LEAGUE_LABEL: Record<League, string> = {
+  serie_a: "Serie A",
+  premier_league: "Premier League",
+  la_liga: "La Liga",
+  bundesliga: "Bundesliga",
+  ligue_1: "Ligue 1",
+};
+
+export const bookmakerEnum = z.enum(["sisal", "goldbet", "eurobet"]);
+export type Bookmaker = z.infer<typeof bookmakerEnum>;
+
+export const BOOKMAKER_LABEL: Record<Bookmaker, string> = {
+  sisal: "Sisal",
+  goldbet: "Goldbet",
+  eurobet: "Eurobet",
+};
+
+export const marketEnum = z.enum([
+  "corner_total",
+  "corner_team",
+  "corner_1x2",
+  "corner_combo",
+  "corner_first_to",
+  "corner_handicap",
+  "goals_over_under",
+  "goals_both_teams",
+  "goals_team",
+  "goals_exact",
+  "cards_total",
+  "cards_team",
+  "match_1x2",
+  "match_double_chance",
+  "multigol",
+  "multigol_team",
+  "score_exact",
+  "score_ht_ft",
+  "shots_total",
+  "shots_on_target_total",
+  "combo_1x2_over_under",
+  "combo_btts_over_union",
+  "combo_btts_over_under",
+  "halves_over_under",
+]);
+export type Market = z.infer<typeof marketEnum>;
+
+export const MARKET_LABEL: Record<string, string> = {
+  corner_total: "Corners — total O/U",
+  corner_team: "Corners — per team",
+  corner_1x2: "Corners — 1X2",
+  corner_combo: "Corners — combo",
+  corner_first_to: "Corners — first to N",
+  corner_handicap: "Corners — handicap",
+  goals_over_under: "Goals — over/under",
+  goals_both_teams: "Both teams to score",
+  goals_team: "Goals — per team",
+  goals_exact: "Goals — exact",
+  cards_total: "Cards — total O/U",
+  cards_team: "Cards — per team",
+  match_1x2: "Match — 1X2",
+  match_double_chance: "Match — double chance",
+  multigol: "Multigoal",
+  multigol_team: "Multigoal — per team",
+  score_exact: "Exact score",
+  score_ht_ft: "HT/FT",
+  shots_total: "Shots — total O/U",
+  shots_on_target_total: "Shots on target — O/U",
+  combo_1x2_over_under: "1X2 + O/U combo",
+  combo_btts_over_under: "BTTS + O/U combo",
+  halves_over_under: "Halves — O/U",
+};
+
+export const matchSchema = z.object({
+  match_id: z.string(),
+  league: leagueEnum,
+  season: z.string(),
+  match_date: z.string(),
+  home_team: z.string(),
+  away_team: z.string(),
+  home_goals: z.number().int().nullable().optional(),
+  away_goals: z.number().int().nullable().optional(),
+  kickoff_at: z.string().nullable().optional(),
+  source: z.string().optional(),
+});
+export type Match = z.infer<typeof matchSchema>;
+
+export const matchesResponse = z.object({
+  items: z.array(matchSchema),
+  total: z.number().int().nonnegative().optional(),
+});
+export type MatchesResponse = z.infer<typeof matchesResponse>;
+
+export const oddsSnapshotSchema = z.object({
+  bookmaker: bookmakerEnum,
+  match_id: z.string().nullable().optional(),
+  market: z.string(),
+  market_params: z.record(z.unknown()),
+  selection: z.string(),
+  payout: z.number().positive(),
+  captured_at: z.string(),
+});
+export type OddsSnapshot = z.infer<typeof oddsSnapshotSchema>;
+
+export const oddsResponse = z.object({
+  items: z.array(oddsSnapshotSchema),
+});
+export type OddsResponse = z.infer<typeof oddsResponse>;
+
+export const scrapeRunSchema = z.object({
+  run_id: z.string(),
+  bookmaker: bookmakerEnum.nullable(),
+  scraper: z.string(),
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+  status: z.string(),
+  rows_written: z.number().int(),
+  rows_rejected: z.number().int(),
+  error_message: z.string().nullable(),
+  host: z.string().nullable().optional(),
+});
+export type ScrapeRun = z.infer<typeof scrapeRunSchema>;
+
+export const scrapeRunsResponse = z.object({
+  items: z.array(scrapeRunSchema),
+});
+export type ScrapeRunsResponse = z.infer<typeof scrapeRunsResponse>;
+
+export const scraperStatusSchema = z.object({
+  bookmaker: bookmakerEnum,
+  last_run: scrapeRunSchema.nullable(),
+  healthy: z.boolean(),
+  unmapped_markets_top: z.array(z.object({ name: z.string(), count: z.number().int() })),
+  history: z.array(
+    z.object({
+      run_id: z.string(),
+      started_at: z.string(),
+      rows_written: z.number().int(),
+      status: z.string(),
+    }),
+  ),
+});
+export type ScraperStatus = z.infer<typeof scraperStatusSchema>;
+
+export const scraperStatusResponse = z.object({
+  items: z.array(scraperStatusSchema),
+});
+export type ScraperStatusResponse = z.infer<typeof scraperStatusResponse>;
+
+export const valueBetSchema = z.object({
+  match_id: z.string(),
+  match_label: z.string(),
+  league: leagueEnum,
+  market: z.string(),
+  selection: z.string(),
+  bookmaker: bookmakerEnum,
+  decimal_odds: z.number().positive(),
+  book_prob: z.number().min(0).max(1),
+  model_prob: z.number().min(0).max(1),
+  edge: z.number(),
+});
+export type ValueBet = z.infer<typeof valueBetSchema>;
+
+export const valueBetsResponse = z.object({
+  items: z.array(valueBetSchema),
+});
+export type ValueBetsResponse = z.infer<typeof valueBetsResponse>;
+
+export const marketListResponse = z.object({
+  items: z.array(
+    z.object({
+      code: z.string(),
+      human_name: z.string(),
+      category: z.string(),
+      selections: z.array(z.string()),
+    }),
+  ),
+});
+
+export const healthResponse = z.object({
+  status: z.string(),
+  version: z.string().optional(),
+});

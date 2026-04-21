@@ -96,6 +96,57 @@ The old `refactored_src/` was the most complete variant. Things worth preserving
 
 ## Architecture
 
+### SPA (phase 7, 2026-04-21)
+
+Single-page app lives in `frontend/` at the repo root, separate from the
+Python monorepo.
+
+| Piece | Choice |
+|-------|--------|
+| Build | Vite 5 + React 18 + TypeScript 5 (strict, `noUncheckedIndexedAccess`) |
+| Styling | Tailwind 3 + shadcn/ui-style primitives hand-copied under `frontend/src/components/ui/` (no CLI; kept only the ones we use) |
+| Routing | TanStack Router 1 (code-based tree in `frontend/src/router.tsx`) |
+| Data fetching | TanStack Query 5; stale-time 30 s, no refetch-on-focus, retries disabled for 401/404 |
+| Global state | `zustand` with `persist`; `superbrain.auth` (bearer token) + `superbrain.prefs` (theme, timezone, selected leagues) — both in `localStorage` |
+| Boundary validation | `zod` schemas in `frontend/src/lib/types.ts`; every API response is `safeParse`d and malformed payloads raise `ApiParseError` for a banner (never a blank screen) |
+| API client | `frontend/src/lib/api.ts` — typed `apiFetch<T>(path, schema, opts)`, bearer-token header, base URL from `VITE_API_BASE_URL`; 401 auto-clears the token |
+| Charts | `react-plotly.js` over `plotly.js-cartesian-dist-min` (saves ~3 MB vs `plotly.js-dist`); component wrapper at `src/components/plot.tsx` |
+| Tests | Vitest + React Testing Library + `@testing-library/jest-dom`; `src/test/setup.ts` installs an in-memory `Storage` because Node 25 ships an experimental `localStorage` that conflicts with jsdom |
+| Lint / format | ESLint flat-ish (`.eslintrc.cjs`) with `@typescript-eslint` + Prettier; `--max-warnings 0` |
+
+Routes:
+
+| Path | Purpose |
+|------|---------|
+| `/login` | Bearer-token entry. Validates against `GET /health` + an authenticated probe. |
+| `/` | Dashboard: fixture / value-bet / scraper-health cards + today's matches table. |
+| `/matches` | Filterable table (league multi-select, date range, team search). |
+| `/matches/$id` | Fixture detail + odds pivot (markets × bookmakers, last-update tooltip). |
+| `/scrapers` | Per-bookmaker tiles: status, rows written, unmapped markets, rows-written history chart, trigger button. |
+| `/bets/value` | Empty state until the engine ships in phase 4b; sortable table when items arrive. |
+| `/backtest` | Form → `POST /backtest/run`; 501 is caught and rendered as a friendly toast. |
+| `/settings` | Active token (masked), theme, timezone, API base URL. |
+
+Env: copy `frontend/.env.example` → `frontend/.env.local` and set
+`VITE_API_BASE_URL`. Build/test:
+
+```bash
+cd frontend
+npm install
+npm run lint
+npm run typecheck   # tsc --noEmit (strict, noUncheckedIndexedAccess)
+npm run test -- --run
+npm run build       # dist/, ~2.0 MB unminified / ~650 KB gzipped (plotly-heavy)
+```
+
+CI runs the same four commands as the `frontend` job in
+`.github/workflows/ci.yml` on Node 20 (npm cache keyed on
+`frontend/package-lock.json`).
+
+Types are hand-written from `superbrain.core.models` + `markets`; replace
+with `openapi-typescript` output once the Phase-6 backend exposes a stable
+`/openapi.json`. See `docs/knowledge.md` → *Deferred* for the switch-over.
+
 ### Data-lake contract (phase 1, 2026-04-21)
 
 The Parquet lake under `data/lake/` is the only persistence layer. The
@@ -514,6 +565,9 @@ Items that will be decided as phases land:
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
 - **CI `gaia doctor` job** — disabled in CI (2026-04-21) because Gaia is a private repo and the job can't clone it without a PAT. Re-enable by adding a `GAIA_READ_PAT` repository secret and restoring the `gaia` job in `.github/workflows/ci.yml`. Local coverage via the pre-push hook and the Cursor session-start hook is adequate in the interim.
+- **SPA ↔ backend type sync** — 2026-04-21: `frontend/src/lib/types.ts` is hand-written to mirror `superbrain.core.models`. Swap to `openapi-typescript http://localhost:8000/openapi.json -o src/lib/api-types.ts` as soon as the Phase-6 FastAPI `/openapi.json` stabilises.
+- **SPA bundle splitting** — 2026-04-21: Plotly drags `dist/assets/index-*.js` to ~2 MB unminified (~645 KB gzipped). Acceptable for a 3-user internal tool. If we ever route public traffic at it, lazy-load `src/components/plot.tsx` via `React.lazy` and drop Plotly from the initial chunk.
+- **SPA value-bet and backtest screens** — 2026-04-21: ship phase 7 with empty-state UX against the Phase-6 stubs (`GET /bets/value` → `{items: []}`, `POST /backtest/run` → 501). Real wiring lands alongside the engine in phase 4b; the forms + sortable table are already in place.
 
 ---
 
