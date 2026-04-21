@@ -27,6 +27,7 @@
 - [Product](#product)
 - [User journey & UX](#user-journey--ux)
 - [Architecture](#architecture)
+- [Alerts](#alerts-phase-8-2026-04-21)
 - [Conventions](#conventions)
 - [Algorithm correctness contract](#algorithm-correctness-contract)
 - [Scraper reliability contract](#scraper-reliability-contract)
@@ -311,6 +312,46 @@ Intentional deviations from the old repo (none change observable behaviour on th
 - Caching: in-process LRU on `(target_column, home, away, season)` inside `price_fixture` instead of the old disk-based `engine/cache.py` (lake is the durable layer; re-pricing is cheap enough that a pickle cache is net-negative on CI).
 
 Golden regression corpus and full end-to-end backtest are **deferred to phase 4b** (see *Deferred / open*). Unit tests cover clustering determinism + partition invariance under row permutation, similarity symmetry / range / hand-computed reference value, and neighbor pooling on a hand-computed 5-team toy. `tests/engine/test_*.py` (22 tests) is the current correctness floor.
+
+### Alerts (phase 8, 2026-04-21)
+
+Notification layer over high-edge value bets produced by the pricing pipeline. Lives under `src/superbrain/alerts/`; tests under `tests/alerts/`. The engine owns *what* is a value bet; this package owns *whether, where and how* to tell a human.
+
+Shape:
+
+1. `AlertPolicy.should_alert(value_bet)` filters a batch into `AlertRecord`s. Rejects fire first-match-wins and are counted on `AlertRunReport.rejected_by_reason`.
+2. `AlertDispatcher.dispatch(value_bets)` loads the last `alert_dedup_window_hours` of `alert_id`s from the sink, runs the policy, fans out to every enabled channel **concurrently per alert, sequentially across alerts**, and persists every `(alert_id, channel)` pair.
+3. `run_alert_sweep(lake)` is the scheduler hook: reads upcoming fixtures in the next `alert_lookahead_hours`, prices them via `find_value_bets`, and calls the dispatcher. Phase 5's APScheduler owns the *when*; this function is the *what*. Also exposed as `python -m superbrain.alerts --run-once` for the GH Actions fallback and the Fly worker.
+
+Threshold reasoning:
+
+- `SUPERBRAIN_ALERT_EDGE_THRESHOLD=0.05` matches the engine's default `edge_threshold`. Lowering it here doesn't help (the engine drops sub-threshold bets before we see them) — the knob exists so owners can raise it for noisy periods.
+- `SUPERBRAIN_ALERT_MIN_PROBABILITY=0.35` guards against +EV longshots that clear edge by virtue of sample variance on rare outcomes (think `corner_total` > 14 at 6.0 odds). 35% is empirical: the fbref24 backtest over 2020-23 showed the realised-vs-model gap widening below that floor.
+- `SUPERBRAIN_ALERT_MAX_PER_RUN=20` + `SUPERBRAIN_ALERT_MAX_PER_MATCH=3` are anti-spam guardrails; a pathological fixture can price 8–10 bets when cornering markets are liquid, and a single Telegram sweep dropping 40 messages is a fast way to train owners to mute the bot.
+
+Dedup contract:
+
+- Natural key: `(bet_code, match_id, bookmaker, selection, date(kickoff))`. `alert_id` is a deterministic hex hash of that tuple.
+- Sink (`data/alerts/sent_alerts.parquet`) records one row per `(alert_id, channel, kickoff_date)` — we track channel-level deliveries so a retry after a partial failure doesn't double-send on the channel that succeeded.
+- `AlertSink.load_alerted_ids(since=...)` returns the set of `alert_id`s whose status is `sent` or `partial` on **any** channel within the dedup window. Those IDs are blocked for the whole sweep. Alerts that failed everywhere stay eligible for re-delivery on the next run.
+- Intra-batch dedup is enforced inside `AlertPolicy` too, so a pricing quirk that emits the same `(market, selection)` twice in one run only alerts once.
+
+Channel optionality:
+
+- Both channels are opt-in via env. `TelegramChannel.from_settings(...)` returns `None` unless both `SUPERBRAIN_TELEGRAM_BOT_TOKEN` and `SUPERBRAIN_TELEGRAM_CHAT_IDS` are set. `EmailChannel.from_settings(...)` returns `None` unless both `SUPERBRAIN_SMTP_HOST` and `SUPERBRAIN_ALERT_EMAIL_RECIPIENTS` are set.
+- If no channel is enabled, `AlertDispatcher` still runs — policy decisions are recorded as `AlertRunReport(sent=0, channels=[])`. That's deliberate: it means a fresh clone can smoke the pipeline end-to-end without provisioning credentials.
+
+Delivery guarantees — what each channel does with a batch:
+
+- **Telegram**: one `sendMessage` call per `(alert, chat_id)` pair, HTML `parse_mode` (smaller escape surface than MarkdownV2, enough for team names + bookmaker slugs). 429 responses honour `parameters.retry_after`; otherwise fall back to `backoff_base * 2^(attempt-1)` up to `max_attempts=3`. Status is `sent` when every chat id succeeds, `partial` on mixed, `failed` on all-zero.
+- **Email**: one batched `multipart/alternative` (plain text + HTML table) per sweep, TLS via `smtplib.SMTP_SSL`. Subject is `Superbrain: {N} value bet(s)` so owner inbox rules can filter cleanly. One `ChannelResult` per alert, all sharing the same `sent_at`; `status` is `sent` for all on success, `failed` for all on SMTP error (SMTP is a batch protocol — no per-recipient partials).
+
+Operator runbook:
+
+1. **Telegram bot.** Open `@BotFather` → `/newbot` → copy the token into `SUPERBRAIN_TELEGRAM_BOT_TOKEN`. Start a chat with the bot, send any message, then `curl https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `result[-1].message.chat.id` into `SUPERBRAIN_TELEGRAM_CHAT_IDS`. For channels prefix `-100`. Multiple ids are comma-separated.
+2. **SMTP.** Use an app-password-capable provider (Fastmail, Zoho, Gmail with an app password, SES with SMTP creds). Set `SUPERBRAIN_SMTP_HOST`/`PORT` (`465` for SMTPS), `SUPERBRAIN_SMTP_USER`/`PASSWORD`, `SUPERBRAIN_SMTP_FROM` (must match the auth identity for most providers), and `SUPERBRAIN_ALERT_EMAIL_RECIPIENTS` (comma-separated).
+3. **Dry-run.** `uv run python -m superbrain.alerts --run-once` reads the lake, prices the next 48 hours, runs the policy, dispatches to whichever channels are configured, persists to the sink, and prints a JSON summary. Safe to rerun — the sink idempotency blocks re-sends inside the dedup window.
+4. **Tuning.** If the bot is noisy, raise `SUPERBRAIN_ALERT_EDGE_THRESHOLD` or `SUPERBRAIN_ALERT_MIN_PROBABILITY` before lowering `SUPERBRAIN_ALERT_MAX_PER_RUN` — the latter silently drops information, the former two shift the bar.
 
 ### Ablation and engine tests (phase 4b, 2026-04-21)
 
