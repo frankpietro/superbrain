@@ -23,7 +23,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import polars as pl
 
@@ -298,14 +298,17 @@ def _summarize(
     )
 
 
-class OddsProvider:
+@runtime_checkable
+class OddsProvider(Protocol):
     """Protocol for callables that supply odds for a fixture in a backtest.
 
-    Kept minimal: ``provider(fixture) -> Iterable[OddsSnapshot]``.
+    Any callable matching ``provider(fixture) -> Iterable[OddsSnapshot]``
+    satisfies the contract -- including plain top-level functions. The
+    ``Protocol`` shape makes that explicit so static checkers accept the
+    common test pattern of passing a module-level helper.
     """
 
-    def __call__(self, fixture: Match) -> Iterable[OddsSnapshot]:  # pragma: no cover
-        raise NotImplementedError
+    def __call__(self, fixture: Match) -> Iterable[OddsSnapshot]: ...
 
 
 class _NoLeakageLake:
