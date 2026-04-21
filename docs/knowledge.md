@@ -96,6 +96,41 @@ The old `refactored_src/` was the most complete variant. Things worth preserving
 
 ## Architecture
 
+### Data-lake contract (phase 1, 2026-04-21)
+
+The Parquet lake under `data/lake/` is the only persistence layer. The
+entry point is `superbrain.data.connection.Lake`, which exposes:
+
+- `ensure_schema()` — idempotent; runs numbered migrations under
+  `src/superbrain/data/migrations/` and writes `schema_manifest.json`.
+- `ingest_odds` / `ingest_matches` / `ingest_team_match_stats` — validated
+  writes that dedupe on natural keys and return an `IngestReport`.
+- `log_scrape_run` — append-only audit trail.
+- `read_odds` / `read_matches` — union-by-name reads across hive
+  partitions.
+
+Hive partition layout:
+
+| Table | Partition keys |
+|-------|----------------|
+| `odds` | `bookmaker=X/market=Y/season=Z` |
+| `matches` | `league=X/season=Y` (+ top-level `match_index.parquet`) |
+| `team_match_stats` | `league=X/season=Y` |
+| `scrape_runs` | `bookmaker=X/year_month=YYYY-MM` |
+| `simulation_runs` | `created_date=YYYY-MM-DD` |
+
+Natural keys (dedupe):
+
+- odds: `(bookmaker, bookmaker_event_id, market, params_hash, selection, captured_at)`
+- matches: `(match_id)` where `match_id = sha256(league|date|home|away)[:16]`
+- stats: `(match_id, team)`
+
+Legacy odds backfill (`scripts/import_legacy_odds.py`) landed **99,492
+Sisal rows** from `fbref24/refactored_src/data/betting_odds.db`, zero
+rejected, re-run dedupes 100 %. Season code normalized from `"2526"` to
+`"2025-26"`; team names canonicalized on the way in (`Siviglia→Sevilla`
+etc.).
+
 ### Stack
 
 | Concern | Choice |
