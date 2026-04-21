@@ -3,11 +3,8 @@ import {
   createRoute,
   createRouter,
   Outlet,
-  redirect,
 } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { useAuth } from "@/stores/auth";
-import { LoginPage } from "@/routes/login";
 import { DashboardPage } from "@/routes/dashboard";
 import { MatchesPage } from "@/routes/matches";
 import { MatchDetailPage } from "@/routes/match-detail";
@@ -18,37 +15,13 @@ import { BacktestPage } from "@/routes/backtest";
 import { TrendsPage } from "@/routes/trends";
 import { SettingsPage } from "@/routes/settings";
 
-function requireAuth(path: string): void {
-  if (!useAuth.getState().token) {
-    throw redirect({
-      to: "/login",
-      search: { redirect: path },
-    });
-  }
-}
-
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
-});
-
-interface LoginSearch {
-  redirect?: string;
-}
-
-const loginRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/login",
-  validateSearch: (search: Record<string, unknown>): LoginSearch =>
-    typeof search.redirect === "string" ? { redirect: search.redirect } : {},
-  component: LoginPage,
 });
 
 const shellRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_shell",
-  beforeLoad: ({ location }) => {
-    requireAuth(location.pathname);
-  },
   component: AppShell,
 });
 
@@ -107,7 +80,6 @@ const settingsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  loginRoute,
   shellRoute.addChildren([
     dashboardRoute,
     matchesRoute,

@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_value_stub_shape(client: TestClient, auth_header: dict[str, str]) -> None:
-    resp = client.get("/bets/value", headers=auth_header)
+def test_value_stub_shape(client: TestClient) -> None:
+    resp = client.get("/bets/value")
     assert resp.status_code == 200
     body = resp.json()
     assert body["items"] == []
@@ -14,10 +14,8 @@ def test_value_stub_shape(client: TestClient, auth_header: dict[str, str]) -> No
     assert body["note"] == "engine not yet wired"
 
 
-def test_markets_lists_every_registered_market(
-    client: TestClient, auth_header: dict[str, str]
-) -> None:
-    resp = client.get("/bets/markets", headers=auth_header)
+def test_markets_lists_every_registered_market(client: TestClient) -> None:
+    resp = client.get("/bets/markets")
     assert resp.status_code == 200
     body = resp.json()
     assert body["count"] >= 20
@@ -29,7 +27,3 @@ def test_markets_lists_every_registered_market(
         assert isinstance(row["selections"], list)
 
 
-def test_stubs_require_auth(client: TestClient) -> None:
-    assert client.get("/bets/value").status_code == 401
-    assert client.get("/bets/markets").status_code == 401
-    assert client.post("/backtest/run").status_code == 401

@@ -48,8 +48,7 @@ def create_app(settings: Settings | None = None, *, lake: Lake | None = None) ->
         version="0.1.0",
         description=(
             "Read-side HTTP surface for the Superbrain value-bet platform. "
-            "Authenticated with shared bearer tokens; engine endpoints are stubbed "
-            "until phase 4a lands."
+            "Engine endpoints are stubbed until phase 4a lands."
         ),
     )
     app.state.settings = settings
@@ -64,7 +63,7 @@ def create_app(settings: Settings | None = None, *, lake: Lake | None = None) ->
         allow_origins=list(settings.cors_origins),
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", settings.request_id_header],
+        allow_headers=["Content-Type", settings.request_id_header],
     )
 
     app.include_router(health_router.router)

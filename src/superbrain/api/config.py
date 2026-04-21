@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     """Immutable env-driven configuration for the API server.
 
     :param lake_path: filesystem path that contains (or will contain) the Parquet lake
-    :param api_tokens: tuple of shared bearer tokens that authorize API calls
     :param cors_origins: allowed origins for browser requests
     :param log_level: structlog / uvicorn root log level
     :param request_id_header: inbound + outbound header that carries the request id
@@ -34,16 +33,13 @@ class Settings(BaseSettings):
     )
 
     lake_path: Path = Field(default=Path("./data/lake"), alias="SUPERBRAIN_LAKE_PATH")
-    api_tokens: Annotated[tuple[str, ...], NoDecode] = Field(
-        default=("dev-token",), alias="SUPERBRAIN_API_TOKENS"
-    )
     cors_origins: Annotated[tuple[str, ...], NoDecode] = Field(
         default=("http://localhost:5273",), alias="SUPERBRAIN_CORS_ORIGINS"
     )
     log_level: str = Field(default="INFO", alias="SUPERBRAIN_LOG_LEVEL")
     request_id_header: str = Field(default="x-request-id", alias="SUPERBRAIN_REQUEST_ID_HEADER")
 
-    @field_validator("api_tokens", "cors_origins", mode="before")
+    @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, v: object) -> object:
         if isinstance(v, str):

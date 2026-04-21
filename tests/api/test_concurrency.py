@@ -19,7 +19,7 @@ from superbrain.data.connection import Lake
 
 @pytest.mark.asyncio
 async def test_concurrent_requests_do_not_serialize(
-    app: object, lake: Lake, auth_header: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    app: object, lake: Lake, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     original = Lake.read_odds
 
@@ -33,7 +33,7 @@ async def test_concurrent_requests_do_not_serialize(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
 
         async def one() -> int:
-            r = await c.get("/odds", headers=auth_header)
+            r = await c.get("/odds")
             return r.status_code
 
         n = 20

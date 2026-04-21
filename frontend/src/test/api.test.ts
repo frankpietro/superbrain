@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { apiFetch, ApiError, ApiParseError } from "@/lib/api";
-import { useAuth } from "@/stores/auth";
 
 const schema = z.object({ status: z.literal("ok") });
 
@@ -22,19 +21,14 @@ function mockFetchOnce(init: MockInit): void {
 }
 
 describe("apiFetch", () => {
-  beforeEach(() => {
-    useAuth.getState().setToken("sb_test");
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
-    useAuth.getState().clear();
   });
 
-  it("sends the bearer token and parses valid responses", async () => {
+  it("does not attach an Authorization header", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string> | undefined;
-      expect(headers?.Authorization).toBe("Bearer sb_test");
+      expect(headers?.Authorization).toBeUndefined();
       return new Response(JSON.stringify({ status: "ok" }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -47,40 +41,15 @@ describe("apiFetch", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("clears the auth token on 401 responses and throws ApiError", async () => {
-    mockFetchOnce({ status: 401, body: { detail: "invalid token" } });
+  it("throws ApiError for non-2xx responses", async () => {
+    mockFetchOnce({ status: 500, body: { detail: "boom" } });
 
     await expect(apiFetch("/matches", schema)).rejects.toBeInstanceOf(ApiError);
-    expect(useAuth.getState().token).toBeNull();
   });
 
   it("throws ApiParseError when the response fails zod validation", async () => {
     mockFetchOnce({ status: 200, body: { status: "degraded" } });
 
     await expect(apiFetch("/health", schema)).rejects.toBeInstanceOf(ApiParseError);
-  });
-
-  it("refuses to call authenticated endpoints without a token", async () => {
-    useAuth.getState().clear();
-    await expect(apiFetch("/matches", schema)).rejects.toMatchObject({
-      name: "ApiError",
-      status: 401,
-    });
-  });
-
-  it("rejects a stale non-ASCII token from localStorage without calling fetch", async () => {
-    // Simulate a pre-sanitization build that persisted a dirty token to
-    // localStorage. setState() bypasses the setToken guard exactly the way a
-    // rehydrate from disk would before onRehydrateStorage landed.
-    useAuth.setState({ token: "dev\u2013token" });
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(apiFetch("/matches", schema)).rejects.toMatchObject({
-      name: "ApiError",
-      status: 401,
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(useAuth.getState().token).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import anyio
 import polars as pl
 from fastapi import APIRouter, Depends, Query
 
-from superbrain.api.deps import get_lake, require_auth
+from superbrain.api.deps import get_lake
 from superbrain.api.schemas import (
     Page,
     ScraperHistoryEntry,
@@ -20,7 +20,7 @@ from superbrain.api.schemas import (
 from superbrain.data.connection import Lake
 from superbrain.data.schemas import SCRAPE_RUNS_SCHEMA
 
-router = APIRouter(prefix="/scrapers", tags=["scrapers"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/scrapers", tags=["scrapers"])
 
 _MAX_LIMIT = 500
 _KNOWN_BOOKMAKERS = ("sisal", "goldbet", "eurobet")

@@ -91,14 +91,11 @@ def _seed_variability(lake: Lake) -> datetime:
     return now
 
 
-def test_variability_by_market_sorts_desc_by_cv(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_variability_by_market_sorts_desc_by_cv(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/variability",
         params={"group_by": "market", "min_points": 3, "since_hours": 168},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -113,14 +110,11 @@ def test_variability_by_market_sorts_desc_by_cv(
     assert items[0]["observation_count"] == 3
 
 
-def test_variability_by_team_counts_home_and_away(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_variability_by_team_counts_home_and_away(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/variability",
         params={"group_by": "team", "min_points": 3, "since_hours": 168},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     teams = {it["key"]: it for it in resp.json()["items"]}
@@ -129,14 +123,11 @@ def test_variability_by_team_counts_home_and_away(
     assert teams["Roma"]["observation_count"] == 6
 
 
-def test_variability_by_match_collapses_all_series(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_variability_by_match_collapses_all_series(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/variability",
         params={"group_by": "match", "min_points": 3, "since_hours": 168},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     items = resp.json()["items"]
@@ -145,49 +136,38 @@ def test_variability_by_match_collapses_all_series(
     assert items[0]["observation_count"] == 6
 
 
-def test_variability_bookmaker_filter(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_variability_bookmaker_filter(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/variability",
         params={"group_by": "market", "bookmaker": "goldbet", "since_hours": 168, "min_points": 3},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     items = resp.json()["items"]
     assert {it["key"] for it in items} == {Market.MATCH_1X2.value}
 
 
-def test_variability_rejects_bad_group_by(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_variability_rejects_bad_group_by(client: TestClient, lake: Lake) -> None:
     resp = client.get(
         "/trends/variability",
         params={"group_by": "bookmaker"},
-        headers=auth_header,
     )
     assert resp.status_code == 400
 
 
-def test_variability_empty_lake_returns_empty_items(
-    client: TestClient, auth_header: dict[str, str]
-) -> None:
-    resp = client.get("/trends/variability", params={"group_by": "market"}, headers=auth_header)
+def test_variability_empty_lake_returns_empty_items(client: TestClient) -> None:
+    resp = client.get("/trends/variability", params={"group_by": "market"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["items"] == []
     assert body["total_series"] == 0
 
 
-def test_time_to_kickoff_groups_transitions(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_time_to_kickoff_groups_transitions(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/time-to-kickoff",
         params={"bucket_hours": 12, "since_hours": 168, "min_points": 3},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -200,36 +180,26 @@ def test_time_to_kickoff_groups_transitions(
         assert 0.0 <= b["prob_any_change"] <= 1.0
 
 
-def test_time_to_kickoff_market_filter(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_time_to_kickoff_market_filter(client: TestClient, lake: Lake) -> None:
     _seed_variability(lake)
     resp = client.get(
         "/trends/time-to-kickoff",
         params={"bucket_hours": 6, "market": "match_1x2", "since_hours": 168, "min_points": 3},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["total_transitions"] == 2
 
 
-def test_time_to_kickoff_empty_lake(client: TestClient, auth_header: dict[str, str]) -> None:
-    resp = client.get("/trends/time-to-kickoff", headers=auth_header)
+def test_time_to_kickoff_empty_lake(client: TestClient) -> None:
+    resp = client.get("/trends/time-to-kickoff")
     assert resp.status_code == 200
     body = resp.json()
     assert body["total_transitions"] == 0
     assert body["buckets"] == []
 
 
-def test_trends_requires_auth(client: TestClient) -> None:
-    assert client.get("/trends/variability").status_code == 401
-    assert client.get("/trends/time-to-kickoff").status_code == 401
-
-
-def test_time_to_kickoff_drops_post_kickoff_transitions(
-    client: TestClient, lake: Lake, auth_header: dict[str, str]
-) -> None:
+def test_time_to_kickoff_drops_post_kickoff_transitions(client: TestClient, lake: Lake) -> None:
     now = _now()
     past_kickoff = (now - timedelta(days=2)).date()
     snapshots = [
@@ -265,7 +235,6 @@ def test_time_to_kickoff_drops_post_kickoff_transitions(
     resp = client.get(
         "/trends/time-to-kickoff",
         params={"since_hours": 168, "min_points": 3},
-        headers=auth_header,
     )
     assert resp.status_code == 200
     assert resp.json()["total_transitions"] == 0

@@ -10,11 +10,11 @@ import anyio
 import polars as pl
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from superbrain.api.deps import get_lake, require_auth
+from superbrain.api.deps import get_lake
 from superbrain.api.schemas import OddsRow, Page
 from superbrain.data.connection import Lake
 
-router = APIRouter(prefix="/odds", tags=["odds"], dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/odds", tags=["odds"])
 
 _MAX_LIMIT = 5000
 
