@@ -157,6 +157,20 @@ class TeamMatchStats(BaseModel):
     ingested_at: datetime
 
 
+class TeamElo(BaseModel):
+    """One team's ClubElo rating on a given date."""
+
+    model_config = ConfigDict(frozen=True)
+
+    team: str
+    country: str
+    snapshot_date: date
+    elo: float
+    rank: int | None = None
+    source: str
+    ingested_at: datetime
+
+
 class IngestProvenance(BaseModel):
     """Provenance tag attached to every write into the lake.
 

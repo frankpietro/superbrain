@@ -46,6 +46,10 @@ class LakeLayout:
     def simulation_runs_root(self) -> Path:
         return self.root / "simulation_runs"
 
+    @property
+    def team_elo_root(self) -> Path:
+        return self.root / "team_elo"
+
     def iter_table_roots(self) -> list[Path]:
         return [
             self.odds_root,
@@ -53,6 +57,7 @@ class LakeLayout:
             self.team_match_stats_root,
             self.scrape_runs_root,
             self.simulation_runs_root,
+            self.team_elo_root,
         ]
 
     def odds_partition(self, *, bookmaker: str, market: str, season: str) -> Path:
@@ -78,6 +83,9 @@ class LakeLayout:
 
     def simulation_runs_partition(self, *, created_date: str) -> Path:
         return self.simulation_runs_root / f"created_date={created_date}"
+
+    def team_elo_partition(self, *, year_month: str) -> Path:
+        return self.team_elo_root / f"year_month={year_month}"
 
 
 def timestamped_filename(prefix: str = "batch", ext: str = "parquet") -> str:

@@ -131,6 +131,52 @@ rejected, re-run dedupes 100 %. Season code normalized from `"2526"` to
 `"2025-26"`; team names canonicalized on the way in (`Siviglia→Sevilla`
 etc.).
 
+### Historical data pipeline (phase 2, 2026-04-21)
+
+Lives under `src/superbrain/scrapers/historical/`. Backfills matches,
+team-match stats, and team Elo for the top-5 European leagues from
+2020-21 onward. Idempotent by construction — everything flows through
+`Lake.ingest_*`, natural keys dedupe.
+
+**Source stack, by role:**
+
+| Source | Role | Transport | Fields |
+|--------|------|-----------|--------|
+| football-data.co.uk | **Primary backbone** (shots, cards, fouls, HT/FT goals, referee, closing odds) | `httpx` against the static `mmz4281/<YYYY>/<LEAGUE>.csv` URL | schedule, FT/HT goals, 6x 1X2 + AH + OU closings, shots, SoT, corners, fouls, yellows, reds, referee |
+| Understat | **xG/xGA/xPts** (must-have for the engine) | Direct AJAX (`/getLeagueData/<slug>/<year>` with `X-Requested-With: XMLHttpRequest`) | per-match xG, xGA, xPts, shots, shots on target |
+| `soccerdata.FBref` | **Enrichment** (possession, pressures, PPDA proxy, passing%) | `soccerdata` + `undetected-chromedriver` | whatever FBref exposes per stat-type; pivoted per team |
+| `soccerdata.ClubElo` | **Team ratings** (new `team_elo` table) | `soccerdata` | daily Elo + rank per club |
+
+**Merge order** (`merge.py`):
+
+1. Fetch football-data CSV and Understat payload per `(league, season)` — always.
+2. Pivot FBref per stat type if `fbref` is in `--sources`.
+3. Canonicalize team names via `superbrain.core.teams.canonicalize_team` **before** joining.
+4. Outer-join football-data + Understat on `(league, match_date, home_canon, away_canon)`; preserve both sides when one is missing (null fills).
+5. Compute `match_id = sha256(league|date|home|away)[:16]` once per merged row.
+6. Emit two records per row into the stats frame (home & away), attach FBref columns by `(match_id, team)` left-join if present.
+7. ClubElo runs independently — one pass per country, writes into the `team_elo` table, not blocking matches.
+
+**Lake surface:**
+
+- `matches`: hive `league=X/season=Y`; natural key `match_id`.
+- `team_match_stats`: hive `league=X/season=Y`; natural key `(match_id, team)`.
+- `team_elo` (new, migration `m003_team_elo`): hive `country=X`; natural key `(team, snapshot_date, source)`.
+- `scrape_runs`: every backfill call logs one row per `(league, season, source-set)`.
+
+**Orchestrator:** `scripts/backfill_historical.py` — CLI:
+`--lake`, `--leagues`, `--seasons`, `--sources football_data,understat[,fbref,clubelo]`.
+Prints a JSON report with `matches_written / matches_skipped / stats_written / elo_written / rejected`.
+
+**Dependency note:** `soccerdata` is an **optional** extra
+(`uv sync --extra historical`). Core `football_data` + `understat`
+paths are pure-`httpx` and need no Chromedriver.
+
+**Measured baseline (2026-04-21, live, Serie A 2023-24, football-data + understat):**
+
+- 382 matches written, 764 team-match-stats rows, 0 rejections.
+- Wall clock: 1.77s first run; re-run is idempotent (writes 0 rows, skips 382).
+
 ### Stack
 
 | Concern | Choice |
@@ -142,7 +188,7 @@ etc.).
 | Backend framework | FastAPI + uvicorn |
 | Scheduler | APScheduler in-process inside the backend; GitHub Actions cron as fallback |
 | Scraping | `httpx` (async); Playwright lazy-loaded per bookmaker only if forced |
-| Historical sources (TBD after spike) | football-data.co.uk + Understat + (soccerdata if alive) |
+| Historical sources | football-data.co.uk (primary) + Understat AJAX (xG) + `soccerdata.FBref` (enrichment) + `soccerdata.ClubElo` (team ratings) |
 | Bookmakers | Sisal, Goldbet, Eurobet |
 | Testing | `pytest`, `pytest-asyncio`, `respx`, `hypothesis` for property tests |
 | Lint/format | `ruff` |
@@ -320,13 +366,127 @@ the code.
   modules, otherwise a second run legitimately writes fresh rows. See
   `tests/scrapers/bookmakers/goldbet/test_scraper.py::test_scrape_is_idempotent`.
 
+### Eurobet scraper (phase 3, 2026-04-21)
+
+Production scraper lives in `src/superbrain/scrapers/bookmakers/eurobet/`. Dual transport: plain `httpx` for public navigation (`prematch-homepage-service`, `prematch-menu-service`), **`curl_cffi` with `impersonate="chrome124"`** for the Cloudflare-gated `detail-service` (per-event + per-meeting). `curl_cffi` is now a hard runtime dep (see `pyproject.toml`); it carries a vendored libcurl-impersonate.
+
+- **Cloudflare bot-fight gate.** `www.eurobet.it` fronts `detail-service` with Bot Fight Mode. Plain `httpx` returns `403 cf-mitigated: challenge`. TLS / JA3 impersonation is the only thing Cloudflare checks — cookies and Playwright are not required. UA string is cosmetic once the fingerprint matches.
+- **Mandatory tenant headers** on every `detail-service` call: `X-EB-MarketId: IT` and `X-EB-PlatformId: WEB`. Missing `X-EB-MarketId` → backend 404. Missing `X-EB-PlatformId` → `{"code":-99,"description":"validation error"}`. Cloudflare occasionally strips or cache-poisons `X-EB-PlatformId` on the meeting endpoint; the scraper tolerates this by fusing `top-disciplines` (public, always available) with `detail-service/meeting` (authoritative) and deduping events.
+- **Discipline/meeting slugs.** `calcio` for football. Top-5 meeting slugs verified live: `it-serie-a` (21), `ing-premier-league` (86 — **not** `gb-premier-league` as the spike initially recorded), `de-bundesliga` (4), `es-liga` (79), `fr-ligue-1` (14).
+- **Rate limit.** Single shared `_RateLimiter` on the client, ≤ 1 req/s across both transports. Per-event market fetches run under `asyncio.Semaphore(3)` on top of that.
+- **Mapped market families.** 1X2 full + per-half, 1X2 handicap, double chance, goals over/under, BTTS, multigoal (full + per-team), goals-per-team Y/N, exact score (incl. XL variants), HT/FT, corners 1X2, corners over/under, cards over/under. "SCOMMESSE TOP" compound groups (`betId` 1549 / 6754) are fan-out-walked into the individual families. `_FAMILY_BY_BET_ID` in `markets.py` is the canonical mapping; the exact-score XL market has two `betId` variants (`5458` and `5474`) depending on fixture.
+- **Known gaps (unmapped, logged once per run).** On the 2026-04-21 live measurement (49 events, top-5 leagues): `QUASI VINCE`, `1X2 + U/O`, `1X + U/O`, `X2 + U/O`, `GG/NG + U/O`, `RIS. ESATTO A GRUPPI` — all appear on ~every event (49/49). These are combo / grouped markets; follow-up phase can map them once we decide whether they fold into existing market families or get their own codes. Match-day-only groups (scorers, corners-team, cards combos, shots, asian handicap) are passed through unmapped for now — the spike catalog documents them but phase 3a intentionally keeps scope to families Sisal and Goldbet already cover.
+- **Measured output (2026-04-21 live run).** 49 events discovered (10/10/9/10/10 across Serie A / Premier / Bundesliga / La Liga / Ligue 1), 5 981 snapshots received, 5 785 written (196 deduped against same-minute re-pricing). Distribution: 3 626 exact-score, 879 1X2, 694 goals-O/U, 441 HT-FT, 196 BTTS, 145 double-chance. No errors.
+- **Live smoke test.** `SUPERBRAIN_LIVE_TESTS=1 uv run pytest tests/scrapers/bookmakers/eurobet/test_live.py`.
+
+---
+
+## Sisal scraper (phase 3, 2026-04-21)
+
+Production scraper lives in `src/superbrain/scrapers/bookmakers/sisal/`.
+Detailed README sits next to the code; this is the summary for future
+agents.
+
+**Architecture.** `scrape()` → `SisalClient` (async `httpx` + `tenacity`
+retries + per-endpoint `asyncio.Semaphore`) → `parse_event_markets()`
+(pure; never raises; returns `(list[OddsSnapshot], Counter[unmapped])`)
+→ `Lake.ingest_odds` + `Lake.log_scrape_run`. The orchestrator owns
+the run-id, `captured_at`, tree cache (1 h TTL, in-process), and the
+`SisalScrapeResult` bookkeeping.
+
+**Endpoints used.** `alberaturaPrematch` (tree),
+`v1/schedaManifestazione/0/{competitionKey}?offerId=0&metaTplEnabled=true&deep=true`
+(events per league), `schedaAvvenimento/{eventKey}?offerId=0`
+(~2 MB, ~130 markets per Serie A prematch fixture). All three are
+unauthenticated JSON over IPv4 from Italy — no cookies, no tokens.
+
+**Top-5 league keys.** `1-209` Serie A, `1-331` Premier,
+`1-228` Bundesliga, `1-570` La Liga, `1-781` Ligue 1 (all under
+`sportId=1`). The tree → key map is brittle on `urlAlias`; resolve by
+`descrizione` instead. Codified in `SISAL_LEAGUE_KEYS`.
+
+**Rate / concurrency.** One request per second per endpoint class
+(semaphore + minimum-interval limiter in `SisalClient`), event fetches
+bounded by `asyncio.Semaphore(4)` in the orchestrator. Retries on
+`429 / 502 / 503 / 504` and network errors, 3 attempts,
+exponential-jitter backoff. 4xx other than 429 fails fast.
+
+**Mapped market families.** 1X2 full + per-half, double chance full +
+per-half, goals over/under (full + per-half, Asian lines, per-team),
+GG/NG (full + per-half), multigoal (full + per-half + per-team), exact
+score, HT/FT, corner 1X2 (full + 1T), corner handicap (full + 1T),
+combos 1X2+U/O and BTTS+U/O, halves over/under. Anything not covered
+is counted in `SisalScrapeResult.unmapped_markets` and logged once per
+run at INFO.
+
+**Known product gaps at Sisal** (spike 2026-04-21, unchanged): prematch
+corner totals, corner per team, corner combos, cards, shots, shots on
+target. Closing these needs a second bookmaker; do not build parsers
+for them in this scraper.
+
+**Team canonicalization.** Names from `firstCompetitor.description` /
+`secondCompetitor.description` flow through
+`superbrain.core.teams.canonicalize_team(name, Bookmaker.SISAL)`.
+`match_id` = `stable_match_id(home_canonical, away_canonical, kickoff)`
+so Sisal matches join cleanly against Goldbet / Eurobet / historicals.
+
+**Idempotency.** Re-running `scrape(lake, run_id=X, captured_at=Y)`
+with the same `(X, Y)` produces zero new rows: `Lake.ingest_odds`
+dedupes on `OddsSnapshot.natural_key`, which folds
+`(bookmaker, bookmaker_event_id, market, selection, frozen params,
+captured_at, run_id)` into a stable hash. Verified by
+`test_idempotent_second_scrape_emits_zero_new_rows`.
+
+**Failure semantics.** `scrape()` never raises. A failed league emits
+`events:<league>:<error>` to `SisalScrapeResult.errors`, sets status
+to `partial`, and lets the other leagues continue. A failed event
+emits `event_markets:<event_key>:<error>` and drops only that event's
+rows. Only "zero rows written" sets status to `failed`.
+
+**Fixture budget.** Test fixtures in
+`tests/fixtures/bookmakers/sisal/` are compact (`separators=(",",":")`,
+no `clusterMenu`, trimmed `scommessaMap` / `infoAggiuntivaMap`) and
+each stay under 50 KB. `scripts/build_sisal_fixtures.py` regenerates
+them from spike payloads. See `test_scraper.test_fixtures_are_under_50kb`
+for the guard.
+
+**Live smoke.**
+`SUPERBRAIN_LIVE_TESTS=1 uv run pytest tests/scrapers/bookmakers/sisal/test_live.py`
+hits the real API (Serie A only). CI and default `pytest -q` skip it.
+
 ---
 
 ## Gotchas
 
 *Add new gotchas here whenever you debug something that cost you more than 10 minutes.*
 
-- 2026-04-21 — **FBref is dead.** `soccerdata`'s FBref backend broke when the site closed. Any scraper that imports `soccerdata.FBref` must be gated behind a live-check.
+- 2026-04-21 — **Sisal needs a browser User-Agent.** The spike ran with
+  `superbrain-spike/0.1` and got HTTP 200s; by the time we built the
+  production client, Akamai Bot Manager on `betting.sisal.it` started
+  **silently timing out** any request whose `User-Agent` does not look
+  like a mainstream browser. No 403 / 429 — just a dangling TLS
+  connection. The default headers in `SisalClient` therefore pose as
+  Chrome/macOS. Revisit this if request volume ever triggers a visible
+  challenge (`_abck` gets a negative sensor value) and we need to
+  persist cookies or rotate UAs.
+- 2026-04-21 — **Sisal `descrizione`, not `descrizioneScommessa`**, is
+  the market name the API publishes at event-detail level. The
+  `esitoList` on each market entry is keyed by `codiceEsito`, and the
+  selection label (`1`, `X`, `OVER`, `GOL`, `1+O`, …) lives in the
+  matching `infoAggiuntivaMap` entry. Parse from those two together,
+  not from `scommessaMap` alone.
+- 2026-04-21 — **Sisal encodes `quota` as decimal-odds × 100 integer**
+  (e.g. `173` → `1.73`), while `payout` carries the same number as a
+  float. Prefer `payout`, fall back to `quota / 100` when missing.
+- 2026-04-21 — **`soglia` is overloaded** on Sisal markets: threshold
+  for over/under, `"1"` / `"2"` for team side on SQUADRA markets,
+  `"1"` / `"2"` for half on MULTIGOAL TEMPO markets. Interpret per
+  market family, not globally.
+- 2026-04-21 — **Sisal `shortDescription` encodes the half** (`"1 T"`,
+  `"TEMPO 1"`, `"T 1"`, `"1T"`) for per-half markets. Use a regex fold
+  rather than exact matches; the SPA is inconsistent.
+- ~~2026-04-21 — **FBref is dead.** `soccerdata`'s FBref backend broke when the site closed. Any scraper that imports `soccerdata.FBref` must be gated behind a live-check.~~ **Superseded 2026-04-21:** `soccerdata.FBref` works (via `undetected-chromedriver`); kept as an enrichment source behind `--sources fbref`, not the primary. See *Historical data pipeline (phase 2)* below.
+- 2026-04-21 — **Understat doesn't embed `datesData` anymore.** The old `JSON.parse` block on the league HTML page is gone (site redesign). Don't parse the league HTML. Use the internal AJAX endpoint `GET https://understat.com/getLeagueData/<league_slug>/<start_year>` with header `X-Requested-With: XMLHttpRequest`; it returns the full JSON payload (`dates`, `teams`, `players`). Our `understat.py` implements it directly in `httpx`; no `understatapi` dep.
 - 2026-04-21 — **The old repo's DuckDB schema is not portable.** Three separate SQLite files (`historical.db`, `betting_odds.db`, `simulations.db`) with overlapping keys. The migration script normalizes teams and drops one-off schema tables. Do not copy the old schema into the new lake verbatim.
 - 2026-04-21 — **GitHub Actions cron minimum is effectively 5 minutes** and jobs are delayed under high platform load. The "always-on" piece must live on Fly.
 
@@ -349,7 +509,7 @@ the code.
 
 Items that will be decided as phases land:
 
-- Which historical data source wins after the phase-2 spike.
+- ~~Which historical data source wins after the phase-2 spike.~~ Decided 2026-04-21: football-data.co.uk (primary) + Understat (xG) + optional `soccerdata.FBref` + `soccerdata.ClubElo`. See *Historical data pipeline (phase 2)*.
 - Whether to keep the Fly volume as the authoritative lake or move to Cloudflare R2.
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
