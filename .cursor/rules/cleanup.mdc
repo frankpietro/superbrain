@@ -1,0 +1,68 @@
+---
+description: Declutter as a first-class agent responsibility. Always active; full detail in AGENTS.md.
+alwaysApply: true
+---
+
+# Clean up after yourself — at-hand reference
+
+Full contract: `AGENTS.md` → *Clean up after yourself*.
+
+A PR is not "done" when it merges. It is done when the environment
+that produced it is as tidy as before. Debris is debt.
+
+## What counts as debris
+
+- External scratch dirs (`/tmp/*`, `../<repo>-scratch/`, dummy
+  clones) used to validate the PR.
+- Session worktrees created for the task — tear down with
+  `gaia session done --slug <s>` once the PR merges.
+- Local feature branches after a squash-merge
+  (`git branch -d <b>`), and stale remote-tracking refs from
+  remote deletions (`git fetch --prune`).
+- Stashes you created — `git stash list` empty by PR close, or
+  every entry documented in `docs/knowledge.md`.
+- Scratch files in the repo (throwaway scripts, captured logs,
+  dumped JSON, `.DS_Store`, editor swap files).
+- Debug prints / commented-out blocks / "TODO: clean up later" in
+  commits of this PR.
+
+## Pre-PR sweep
+
+```bash
+git status                                       # clean?
+git stash list                                   # empty?
+git worktree list                                # only active sessions?
+gaia session list 2>/dev/null || true
+git branch --merged main | grep -v '^\* '
+git branch -vv | awk '/: gone]/'
+```
+
+`gaia doctor` flags most of this. Run it before handing off.
+
+## Post-merge sweep
+
+```bash
+gh pr merge <n> --squash --delete-branch --admin
+git checkout main
+git pull --ff-only origin main
+git fetch --prune
+git branch -d <your-feature-branch>
+gaia session done --slug <s>     # for any session worktree you opened
+```
+
+Configure once per clone: `git config fetch.prune true` (already
+wired by `scripts/setup-hooks.sh`).
+
+## Hard rules
+
+1. Never leave an orphan session worktree behind.
+2. Never commit files whose only purpose was to test the commit.
+3. Never `rm -rf` outside the current working tree unless you can
+   name the exact path and confirm it's yours.
+4. Never destroy another agent's work in the name of tidiness —
+   someone else's worktree / branch / stash is not debris.
+5. Never silence `gaia doctor` warnings by deleting the check;
+   fix what it reports.
+
+When a directory / file / branch could belong to the user or
+another agent, stop and ask before cleaning.
