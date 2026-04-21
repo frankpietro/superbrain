@@ -498,6 +498,15 @@ class Lake:
             return 0, skipped
 
         target = partition / timestamped_filename(prefix="batch", ext="parquet")
+        if target.exists():
+            stem = target.stem
+            suffix = 1
+            while True:
+                candidate = partition / f"{stem}-{suffix:03d}.parquet"
+                if not candidate.exists():
+                    target = candidate
+                    break
+                suffix += 1
         frame = align_to_schema(frame, schema)
         frame.write_parquet(target)
         return frame.height, skipped

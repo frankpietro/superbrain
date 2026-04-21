@@ -1,1 +1,1 @@
-"""FastAPI routers, one per resource family."""
+"""Routers for the Superbrain HTTP API."""
