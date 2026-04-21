@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     lake_path: Path = Field(default=Path("./data/lake"), alias="SUPERBRAIN_LAKE_PATH")
     api_tokens: tuple[str, ...] = Field(default=("dev-token",), alias="SUPERBRAIN_API_TOKENS")
     cors_origins: tuple[str, ...] = Field(
-        default=("http://localhost:5173",), alias="SUPERBRAIN_CORS_ORIGINS"
+        default=("http://localhost:5273",), alias="SUPERBRAIN_CORS_ORIGINS"
     )
     log_level: str = Field(default="INFO", alias="SUPERBRAIN_LOG_LEVEL")
     request_id_header: str = Field(default="x-request-id", alias="SUPERBRAIN_REQUEST_ID_HEADER")

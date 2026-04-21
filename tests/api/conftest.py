@@ -36,7 +36,7 @@ def settings(tmp_path: Path, token: str) -> Settings:
     return Settings(
         SUPERBRAIN_LAKE_PATH=tmp_path / "lake",
         SUPERBRAIN_API_TOKENS=(token, "other-token"),
-        SUPERBRAIN_CORS_ORIGINS=("http://localhost:5173",),
+        SUPERBRAIN_CORS_ORIGINS=("http://localhost:5273",),
         SUPERBRAIN_LOG_LEVEL="WARNING",
     )
 
