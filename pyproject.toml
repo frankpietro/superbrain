@@ -126,6 +126,10 @@ module = ["soccerdata", "pandas"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy", "scipy.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "backfill_historical"
 ignore_missing_imports = true
 
