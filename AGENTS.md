@@ -474,6 +474,115 @@ PR N doesn't get buried under follow-up work.
 
 ---
 
+## Clean up after yourself *(mandatory)*
+
+Every PR must leave the working environment at least as tidy as it
+found it. A merged PR with a junk pile of orphan worktrees, stale
+branches, forgotten stashes, and `/tmp/repo-scratch-3` dirs is not
+"done" — it's debt the next agent pays. Decluttering is part of the
+task, not a follow-up.
+
+### What counts as debris
+
+- **External scratch directories** used to validate work — `/tmp/*`,
+  sibling `../<repo>-scratch/`, "playground" clones, dummy repos
+  used to test a hook. If it's not under the repo root, it dies
+  with the PR.
+- **Session worktrees** created for the PR. When the work lands,
+  run `gaia session done --slug <s>` (see
+  `.gaia/reference/patterns/agent-worktree-sessions.md`). An
+  orphaned worktree registered in `.git/gaia-sessions.json` with a
+  missing path is a `gaia doctor` warning, and it's yours to fix.
+- **Local branches** — the feature branch after the squash-merge.
+  Remote is handled by `gh pr merge --delete-branch` (always pass
+  it); local side still needs
+  `git fetch --prune && git branch -d <branch>`. If the PR closed
+  without merging, delete the branch on both ends. No
+  `feat/abandoned-idea-2` sitting around for weeks.
+- **Stale remote-tracking refs** — `origin/feat/old-thing` that
+  was deleted upstream. Solved permanently per-clone with
+  `git config fetch.prune true` (wired by
+  `scripts/setup-hooks.sh`); when working in a clone that doesn't
+  have it, run `git fetch --prune` before opening a PR.
+- **Stashes** you created. `git stash list` should be empty at the
+  end of a PR, or every remaining entry should be documented in
+  `docs/knowledge.md` with a reason and a recovery plan. Never
+  leave an unexplained stash behind — the next agent will either
+  ignore it (growing the pile) or `git stash drop` it (destroying
+  something important).
+- **Scratch files in the repo**: throwaway scripts, captured logs,
+  dumped JSON, `test.sh`, `debug.md`, screenshots, `.DS_Store`,
+  editor swap files. They either belong in the PR with a purpose,
+  or they belong in `.gitignore`, or they belong in the trash.
+- **Dead code** introduced in earlier commits of the same PR,
+  commented-out blocks, `console.log` / `print` / `dbg!`
+  debugging statements, TODO comments saying "clean this up
+  later." Later is now — squash it into the PR or delete it.
+
+### The cleanup sweep (before you open the PR)
+
+Run this before every `gh pr create`. Abort the PR if anything
+surprises you and surface it to the user.
+
+```bash
+git status                                  # tree clean?
+git stash list                              # empty (or documented)?
+git worktree list                           # only active sessions?
+gaia session list 2>/dev/null || true       # sessions registered here?
+git branch --merged main | grep -v '^\* '   # local branches you can delete
+git branch -vv | awk '/: gone]/'            # tracking a branch the remote deleted
+ls /tmp 2>/dev/null | grep -iE "$(basename "$PWD")|scratch|sandbox" || true
+```
+
+The `gaia doctor` command surfaces most of these as warnings — run
+it on any project you touched in this session before handing off.
+
+### The cleanup sweep (after merge)
+
+```bash
+gh pr merge <n> --squash --delete-branch --admin   # remote branch gone
+git checkout main
+git pull --ff-only origin main
+git fetch --prune                                  # remove stale remote refs
+git branch -d <your-feature-branch>                # local branch gone
+# For any session worktree you created for this PR:
+gaia session done --slug <s>
+```
+
+If `gh pr merge --delete-branch` fails for any reason, explicitly
+`git push origin --delete <branch>` to finish the job.
+
+### Hard rules
+
+1. **Never leave an orphan session worktree behind.** If the work
+   merged, `gaia session done --slug <s>`. If the work is
+   abandoned, same command with `--force`.
+2. **Never commit files whose only purpose was to test the commit.**
+   Smoke-test fixtures live under `tests/`. Throwaway one-shot
+   scripts don't live in the repo.
+3. **Never `rm -rf` outside the current repo's working tree** to
+   clean debris unless you can name the exact directory and confirm
+   it's yours. When in doubt, `ls` it and ask.
+4. **Never destroy another agent's work in the name of tidiness.**
+   Someone else's worktree, branch, or stash is not debris. See
+   *Recovery* in the concurrency section.
+5. **Never silence `gaia doctor` warnings by deleting the
+   warning.** If `doctor` complains about 3 orphan worktrees, fix
+   the worktrees — don't lower the threshold to hide them.
+
+### When cleanup isn't safe (ask first)
+
+- A directory you don't remember creating (could be the user's).
+- Any file the user created during the session.
+- A branch with commits you did not author.
+- Anything under `.git/` other than `.git/gaia-sessions.json`
+  entries for sessions you opened.
+
+In those cases: surface what you found, propose the cleanup, wait
+for the user to confirm.
+
+---
+
 ## Operating principle: trade security for convenience when it removes a human step
 
 This project optimises for **agent autonomy over defence-in-depth**

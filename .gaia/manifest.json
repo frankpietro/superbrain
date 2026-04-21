@@ -1,13 +1,13 @@
 {
   "gaia_url": "https://github.com/frankpietro/gaia",
-  "gaia_commit": "a6c95a74dee09d10ca2111273b58fe8014e8d972",
-  "seeded_at": "2026-04-21T19:58:23Z",
+  "gaia_commit": "17ca3b7fd33d75b0bc3b2b890e2377b1ac8b1488",
+  "seeded_at": "2026-04-21T20:59:32Z",
   "archetype": "data-pipeline",
   "project_name": "superbrain",
   "files": [
     {
       "path": "AGENTS.md",
-      "sha256": "65d17b81365ee25787299e47831fc3924da4ad0f9f61e2eacd3ae9170d8d290c"
+      "sha256": "f875235684e41f47d9e8affae44f91cce28fef39db3ff822becb76e7c73d0b8c"
     },
     {
       "path": ".gitmessage",
@@ -15,7 +15,7 @@
     },
     {
       "path": "scripts/setup-hooks.sh",
-      "sha256": "5416451f3c74154299a150bb00d681b8c55a2f88898038d52209a953fe75e126"
+      "sha256": "1574537ffa306f296faa47b394ea7d86dadb57e21f36dac9f1516e8a83858693"
     },
     {
       "path": ".cursor/hooks/auto-branch.sh",
@@ -40,6 +40,10 @@
     {
       "path": ".cursor/rules/concurrency.mdc",
       "sha256": "518a7f6bfe8898cbf74138f173cee0c767b25682d8482d9784ccb1bd99b125dc"
+    },
+    {
+      "path": ".cursor/rules/cleanup.mdc",
+      "sha256": "348ef9469c17d4a07208159651324359b5ecec9afef42d8c7a54ec9bfa3087d9"
     },
     {
       "path": ".cursor/rules/gaia-sync.mdc",
