@@ -142,8 +142,16 @@ export const api = {
     apiFetch(`/scrapers/${encodeURIComponent(bookmaker)}/run`, z.object({ run_id: z.string() }), {
       method: "POST",
     }),
-  valueBets: (params?: { league?: string; min_edge?: number }) =>
-    apiFetch("/bets/value", valueBetsResponse, { query: params }),
+  valueBets: (params?: {
+    league?: string;
+    min_edge?: number;
+    markets?: string[];
+    limit?: number;
+    n_clusters?: number;
+    quantile?: number;
+    min_matches?: number;
+    min_history_matches?: number;
+  }) => apiFetch("/bets/value", valueBetsResponse, { query: params }),
   marketList: () => apiFetch("/bets/markets", marketListResponse),
   trendsVariability: (params: {
     group_by: "market" | "team" | "match";

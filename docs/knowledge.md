@@ -653,6 +653,62 @@ Deferred for a future phase (not blocking anything today):
   persists to `data/ablation_runs/`, so `/analytics` can draw comparisons
   across parameter sweeps.
 
+### Value-bets API wiring (phase 10, 2026-04-21)
+
+Closes the other half of the "engine-vs-UI" gap: `GET /bets/value` was a
+stub returning `{items: [], note: "engine not yet wired"}`. It now prices
+every upcoming fixture with the real phase-4b engine and returns the
+surviving edges sorted descending.
+
+Backend (`src/superbrain/api/routers/bets.py`):
+
+- `GET /bets/value` loads fixtures with `match_date >= today` and at
+  least one null goals column, then for each one builds an
+  `EngineContext` via `build_engine_context(...)` and calls
+  `find_value_bets(...)`. Context is built per-fixture rather than
+  once-per-league because the engine's similarity / cluster state is
+  keyed on the full history window, not the league — cheap enough in
+  practice given fixture volume.
+- Query knobs exposed: `league`, `min_edge`, `markets` (list), `limit`,
+  plus the engine hyperparams `n_clusters`, `quantile`, `min_matches`,
+  `min_history_matches`. Defaults come from `PricingConfig` /
+  `ProbabilityConfig` so the UI never drifts.
+- `ValueBetItem` (replacing the old `ValueBetStub`) carries
+  `market_params`, `sample_size`, `captured_at`, `kickoff_at` — the
+  SPA needs these to render meaningful rows and detect when the odds
+  snapshot ages out.
+- Fixtures with insufficient history (`build_engine_context` returns
+  `None`) are silently skipped; pricing exceptions (`ValueError`,
+  `KeyError`, `RuntimeError`) are logged and skipped so one bad
+  fixture can't 500 the whole page.
+
+SPA (`frontend/src/routes/value-bets.tsx`):
+
+- Filter form: league / market / `min_edge` / `limit` with an "Apply
+  filters" submit that drives the react-query key. Manual "Refresh"
+  button re-fetches on demand — we don't poll, because upstream
+  scrapers land at known cadences and silent refetching hides the
+  "my edge vanished" signal.
+- Extended the row with sample-size (`n`) so the user can gauge
+  model confidence; kept the open → match-detail link.
+- `valueBetSchema` picked up `market_params`, `sample_size`,
+  `captured_at`, `kickoff_at` as optional so older backend responses
+  (pre-wiring) still parse cleanly.
+
+Tests:
+
+- `tests/api/test_bets.py` — shape + auth against an empty lake.
+- `tests/api/test_bets_value.py` — seeds a 3-season synthetic lake
+  with one upcoming fixture carrying a generous bookmaker odd, and
+  asserts the endpoint surfaces a value bet, respects `min_edge`, and
+  respects the `markets=` filter.
+
+Not touched in this phase (tracked elsewhere):
+
+- Backtest endpoint — landed in PR #24, synchronous JSON response.
+  SSE streaming of longer multi-season backtests is deferred; the
+  engine is still millisecond-fast on single-season slices.
+
 ### Dev environment
 
 Trade-offs made on the owner's personal dev machine. See `AGENTS.md` → "Operating principle".
