@@ -43,3 +43,25 @@ title: Test scraper idempotency by freezing datetime.now()
 ---
 
 Our OddsSnapshot dedupe key includes captured_at, so two identical scrape runs in a test produce distinct rows because time advances between runs. Idempotency tests must monkeypatch datetime.now() to a frozen instant inside both the scraper and the parser modules so that both runs stamp identical captured_at values, letting Lake.ingest_odds exercise its real dedupe path. Applies to any scraper whose natural key includes a capture timestamp. Reference: tests/scrapers/bookmakers/goldbet/test_scraper.py::test_scrape_is_idempotent.
+
+---
+id: 2026-04-21-03
+tier: reference
+target: reference/patterns/apscheduler-cron.md
+date: 2026-04-21
+status: pending
+title: APScheduler from_crontab weekday indexing gotcha
+---
+
+APScheduler's CronTrigger.from_crontab uses APScheduler-native weekday indexing (0=Mon..6=Sun), not POSIX cron (0=Sun..6=Sat). A crontab string like "0 4 * * 1-5" therefore fires Tue-Sat, not Mon-Fri. Recommendation for any Gaia-seeded project using APScheduler: always pass named weekdays ("mon-fri") in crontab strings, or build CronTrigger(day_of_week=...) directly. Surfaced during Phase 5 of superbrain; cost ~20 min of failing trigger tests.
+
+---
+id: 2026-04-21-04
+tier: reference
+target: reference/preferences.md
+date: 2026-04-21
+status: pending
+title: Filter pytest-asyncio unraisable-exception leak on Python 3.12
+---
+
+pytest-asyncio 1.x leaks an event loop + socket per module boundary on Python 3.12 via _temporary_event_loop_policy. When filterwarnings=['error'] is set (which we recommend), any later test that triggers gc.collect() (hypothesis' register_random does this on its own) converts those leaks into session-level failures via PytestUnraisableExceptionWarning. Until pytest-asyncio ships a fix, projects that use both async tests and filterwarnings=error should add 'ignore::pytest.PytestUnraisableExceptionWarning' to their pyproject.toml filterwarnings list. Consider documenting this in Tier-2 preferences under the testing section.

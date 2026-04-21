@@ -228,6 +228,69 @@ paths are pure-`httpx` and need no Chromedriver.
 - 382 matches written, 764 team-match-stats rows, 0 rejections.
 - Wall clock: 1.77s first run; re-run is idempotent (writes 0 rows, skips 382).
 
+### Scheduler and always-on worker (phase 5, 2026-04-21)
+
+Always-on orchestration lives in `src/superbrain/scheduler/` and is
+driven by APScheduler's `AsyncIOScheduler` inside a single Fly.io
+free-tier machine. GitHub Actions runs the same jobs via a
+`--run-once` CLI as a scheduled fallback whenever the Fly machine is
+paused. Lake idempotency (natural keys + `Lake.ingest_*`) means either
+path can fire without producing duplicates.
+
+**Cadence (and why):**
+
+| Job | Trigger | Rationale |
+|-----|---------|-----------|
+| `scrape_sisal` | every 15 min, offset 0 | Matches the Sisal scraper's rate-limit contract (≥10 s between bookmaker requests, adaptive throttling). 15 min × ≈180 events = ~750 requests / hour, well under the "burst-tolerant but sustained-sensitive" threshold observed in phase 3. |
+| `scrape_goldbet` | every 15 min, offset +5 min | Goldbet's Akamai shield reacts to parallel traffic on the same minute. Staggering avoids simultaneous firing across the three bookmakers. |
+| `scrape_eurobet` | every 15 min, offset +10 min | Eurobet's Cloudflare mirrors the Goldbet concern; 10 min offset keeps the three scrapers strictly out-of-phase. |
+| `backfill_historical` | daily cron `0 4 * * mon-fri`, UTC | Football-data + Understat only refresh after midweek fixtures settle; Mon–Fri 04:00 UTC catches every tier-1 weekend and midweek round without re-fetching unchanged seasons. |
+
+**Fly.io sizing.** `fly.toml` pins the single machine to
+`shared-cpu-1x` with 256 MB RAM (the free-tier default) and a 1 GB
+`superbrain_data` volume at `/data` carrying the Parquet lake. One
+process definition `scheduler = "python -m superbrain.scheduler"` is
+the only workload. `kill_signal = "SIGTERM"` + `kill_timeout = "15s"`
+give APScheduler enough time to finish an in-flight job before Fly
+halts the machine; our `start()` installs a `SIGTERM` handler that
+resolves an `asyncio.Event` and calls `sch.shutdown(wait=True)`.
+
+**Actions fallback.** `.github/workflows/scheduled-scrapes.yml` fires
+two crons: `*/15 * * * *` (bookmakers) and `15 4 * * *` (historical).
+Each job runs
+`uv run python -m superbrain.scheduler --run-once --jobs <group>`,
+writes into an ephemeral `data/lake/` inside the runner, and uploads
+the generated Parquet files as a workflow artifact (no push to CI).
+Forks are short-circuited by
+`if: github.repository == 'frankpietro/superbrain'` so they do not
+burn Actions minutes on a cron that targets the owner's lake.
+
+**Audit trail.** Every scheduler invocation writes a `ScrapeRun` row
+with `run_id`, `bookmaker`, `scraper`, `started_at`, `finished_at`,
+`rows_written`, `rows_rejected`, `status`, and `error_message`. The
+scheduler's `ScrapeRun` is distinct from the per-scraper internal
+`ScrapeRun` so we can tell "job was invoked" from "scraper made
+progress". `run_id` prefix encodes the source (`scheduler-sisal-…`,
+`actions-historical-…`).
+
+**CLI surface.**
+`python -m superbrain.scheduler` (long-running, APScheduler) and
+`python -m superbrain.scheduler --run-once --jobs {all|bookmakers|historical|sisal|goldbet|eurobet}`.
+The CLI stays internal — it exists for the Fly container and the
+Actions runner, not for human contributors.
+
+**Gotcha (logged below).** APScheduler's
+`CronTrigger.from_crontab` uses APScheduler-native weekday indexing
+(0=Mon..6=Sun) instead of POSIX cron (0=Sun..6=Sat). `"0 4 * * 1-5"`
+therefore fires Tue–Sat, not Mon–Fri. Defaults ship as
+`"0 4 * * mon-fri"` which is unambiguous; encoded as the constant
+`DEFAULT_HISTORICAL_CRON` in `scheduler/config.py`.
+
+**Deploy touch-point.** The operator runs
+`fly launch --no-deploy`, `fly volumes create superbrain_data --size 1 --region <region>`,
+`fly secrets set …`, and `fly deploy` once. Detailed runbook:
+`docs/deployment/scheduler.md`.
+
 ### Stack
 
 | Concern | Choice |
@@ -603,6 +666,23 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 - 2026-04-21 — **Understat doesn't embed `datesData` anymore.** The old `JSON.parse` block on the league HTML page is gone (site redesign). Don't parse the league HTML. Use the internal AJAX endpoint `GET https://understat.com/getLeagueData/<league_slug>/<start_year>` with header `X-Requested-With: XMLHttpRequest`; it returns the full JSON payload (`dates`, `teams`, `players`). Our `understat.py` implements it directly in `httpx`; no `understatapi` dep.
 - 2026-04-21 — **The old repo's DuckDB schema is not portable.** Three separate SQLite files (`historical.db`, `betting_odds.db`, `simulations.db`) with overlapping keys. The migration script normalizes teams and drops one-off schema tables. Do not copy the old schema into the new lake verbatim.
 - 2026-04-21 — **GitHub Actions cron minimum is effectively 5 minutes** and jobs are delayed under high platform load. The "always-on" piece must live on Fly.
+- 2026-04-21 — **GENERAL: APScheduler's `CronTrigger.from_crontab`
+  uses APScheduler-native weekday indexing** (0=Mon..6=Sun), not POSIX
+  cron (0=Sun..6=Sat). `"0 4 * * 1-5"` therefore fires Tue–Sat, not
+  Mon–Fri. Always use named weekdays (`mon-fri`) in crontab strings
+  passed to `from_crontab`, or build `CronTrigger(day_of_week=…)`
+  directly. The Phase 5 default is `DEFAULT_HISTORICAL_CRON =
+  "0 4 * * mon-fri"` in `scheduler/config.py`. Cost us ~20 min of
+  staring at failing trigger tests before spotting the off-by-one.
+- 2026-04-21 — **pytest-asyncio 1.x leaks an event loop + socket per
+  module boundary** in Python 3.12 via `_temporary_event_loop_policy`.
+  Once a later test triggers `gc.collect()` (hypothesis does this in
+  `register_random`) the leaks surface as
+  `PytestUnraisableExceptionWarning`, which `filterwarnings = ["error"]`
+  upgrades into a session-level failure. Filter
+  `ignore::pytest.PytestUnraisableExceptionWarning` in
+  `pyproject.toml` → `[tool.pytest.ini_options]` until pytest-asyncio
+  releases a fix. Tracked upstream; revert the filter once resolved.
 
 ---
 
