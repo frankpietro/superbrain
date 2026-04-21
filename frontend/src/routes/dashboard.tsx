@@ -58,7 +58,12 @@ export function DashboardPage() {
     queryFn: () => api.valueBets(),
   });
 
-  const todayMatches = matchesQuery.data?.items ?? [];
+  // Belt-and-braces: filter client-side in case the backend ignored the
+  // date window (older deploys spoke `kickoff_from` / `kickoff_to`, not
+  // `date_from` / `date_to`, and would return every fixture unfiltered).
+  const todayMatches = (matchesQuery.data?.items ?? []).filter(
+    (m) => m.match_date === today,
+  );
   const valueCount = valueQuery.data?.items.length ?? 0;
   const anyError = matchesQuery.error || statusQuery.error || valueQuery.error;
 
