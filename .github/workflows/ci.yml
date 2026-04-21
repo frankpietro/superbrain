@@ -63,4 +63,4 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Gaia doctor
-        run: gaia doctor --verbose
+        run: gaia doctor "$GITHUB_WORKSPACE"
