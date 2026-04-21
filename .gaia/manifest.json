@@ -1,13 +1,13 @@
 {
   "gaia_url": "https://github.com/frankpietro/gaia",
-  "gaia_commit": "7fa3ba21e888df23b9e8febc1874d5315e326809",
-  "seeded_at": "2026-04-21T14:11:23Z",
+  "gaia_commit": "a6c95a74dee09d10ca2111273b58fe8014e8d972",
+  "seeded_at": "2026-04-21T19:58:23Z",
   "archetype": "data-pipeline",
   "project_name": "superbrain",
   "files": [
     {
       "path": "AGENTS.md",
-      "sha256": "83d22b23f9d44ae79ccf03431964469c8522ff2663b37932d9df53760a5ce188"
+      "sha256": "65d17b81365ee25787299e47831fc3924da4ad0f9f61e2eacd3ae9170d8d290c"
     },
     {
       "path": ".gitmessage",
@@ -19,7 +19,7 @@
     },
     {
       "path": ".cursor/hooks/auto-branch.sh",
-      "sha256": "8c61dad03c05e36de3c59a2257c1c6e326d815a8cd3e8eca6213b846980cc50b"
+      "sha256": "219721d2d2971b4c410d58c08c8c78cca8608b8bd5e987db448b5a4d27991719"
     },
     {
       "path": ".cursor/hooks.json",
@@ -39,7 +39,7 @@
     },
     {
       "path": ".cursor/rules/concurrency.mdc",
-      "sha256": "0350b4c5fc16d1da811ae1b5ae9b56b73a627d38501a334c7e6f400ca8b2c1ab"
+      "sha256": "518a7f6bfe8898cbf74138f173cee0c767b25682d8482d9784ccb1bd99b125dc"
     },
     {
       "path": ".cursor/rules/gaia-sync.mdc",
@@ -54,8 +54,12 @@
       "sha256": "43aca50ad9ce14f4f6e1bf699e5cf91895b9d692caacde296b372543171339cf"
     },
     {
+      "path": ".gaia/reference/patterns/agent-worktree-sessions.md",
+      "sha256": "931e3639d29a8a7f7aa1e98c66a96e1620636b733ff7ad41239c2abfbc14ac5f"
+    },
+    {
       "path": ".gaia/reference/patterns/README.md",
-      "sha256": "84f064cf7cf48d243464d1c088846066976ad59ef918deb2d45f40b52ff76825"
+      "sha256": "beefa6347f5d2a091cbe45eb8c639cbf009e22ec8188131b9356d5dc9c5c7078"
     },
     {
       "path": ".gaia/reference/patterns/ci-matrix-strategy.md",
@@ -67,7 +71,7 @@
     },
     {
       "path": ".gaia/reference/patterns/anti-patterns.md",
-      "sha256": "0f99a45d772f83a44fac4d4663c52c595ffb993635e8de094542199d3761b480"
+      "sha256": "a4a4ffaf0e999a21031231eef4d58f3fa8f28920b777cf1466cf6a4161646a1c"
     },
     {
       "path": ".gaia/reference/archetypes/multi-tenant-saas.md",
