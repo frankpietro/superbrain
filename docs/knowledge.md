@@ -121,7 +121,7 @@ Routes:
 |------|---------|
 | `/login` | Bearer-token entry. Validates against `GET /health` + an authenticated probe. |
 | `/` | Dashboard: fixture / value-bet / scraper-health cards + today's matches table. |
-| `/matches` | Filterable table (league multi-select, date range, team search). |
+| `/matches` | Expandable card list — past and upcoming in one view (see *Matches page (2026-04-21)* below). |
 | `/matches/$id` | Fixture detail + odds pivot (markets × bookmakers, last-update tooltip). |
 | `/scrapers` | Per-bookmaker tiles (status, rows written, unmapped markets, rows-written history, trigger button) + a "Recent scraped odds" grid below: one card per `MarketCategory`, up to 6 most-recent rows across providers, 24 h window, refreshed on the same 30 s cadence. |
 | `/bets` | Recent-bets feed (index): newest-first, cursor-paginated table across providers. Filters: bookmaker multi-select (narrows client-side when >1 chosen because `GET /odds` accepts a single bookmaker), market dropdown (sections grouped by `MarketCategory`), `captured_from` (default last 24 h). |
@@ -149,6 +149,55 @@ CI runs the same four commands as the `frontend` job in
 Types are hand-written from `superbrain.core.models` + `markets`; replace
 with `openapi-typescript` output once the Phase-6 backend exposes a stable
 `/openapi.json`. See `docs/knowledge.md` → *Deferred* for the switch-over.
+
+#### Matches page (2026-04-21)
+
+`/matches` shows **past and upcoming fixtures in one unified list**,
+not a table. The view partitions on the browser's current date
+(`match_date < today` → past, else upcoming), upcoming ascending then
+past descending, rendered as `MatchCard` components
+(`frontend/src/components/match-card.tsx`) with exactly one card
+expanded at a time (`expandedId` state in
+`frontend/src/routes/matches.tsx`).
+
+Inline summary, by design:
+
+- **Past** — final score (`home_goals – away_goals`) + xG line
+  (`xG {home_xg} – {away_xg}`). The xG line is omitted when both
+  sides are null.
+- **Upcoming** — teams only; the date already rides in the card
+  header. No odds teaser by user request.
+
+Expanded content is lazy-fetched per card:
+
+- **Past** — `GET /matches/{id}/stats` returns home + away
+  `team_match_stats` rows; the card renders the intersection that has
+  data (nulls stay hidden). Link to `/matches/$id` for the full odds
+  grid.
+- **Upcoming** — `GET /odds?match_id=…&market=match_1x2` → latest
+  payout per bookmaker, pivoted into a `1 / X / 2` row-per-bookmaker
+  table. Link to `/matches/$id` for every other market.
+
+Backend contract:
+
+- `MatchRow` list now carries `home_xg` / `away_xg` (nullable
+  floats), joined in-memory per list call — one round-trip, no
+  extra per-row request. Rows without stats get `null` on both sides.
+- `GET /matches/{id}/stats` is a new endpoint returning
+  `{match_id, home, away}` where each side is the wide
+  `TeamMatchStatsRow` (every metric optional). Returns 404 only when
+  the fixture itself is unknown; an existing fixture with no stats
+  returns `{home: null, away: null}` so the card can render an empty
+  state instead of a scary error.
+- `GET /matches` now accepts `leagues` (repeated) and
+  `date_from` / `date_to` in addition to the legacy
+  `league` / `kickoff_from` / `kickoff_to`; the plural / `date_*`
+  forms win when both are sent. This closes a long-standing
+  contract mismatch where the SPA filter bar sent the new names but
+  the backend silently ignored them.
+
+Default date window on first load is **past 15 days + next 7 days**.
+Users widen or narrow via the existing date-range filters.
 
 ### Data-lake contract (phase 1, 2026-04-21)
 

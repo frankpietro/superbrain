@@ -79,7 +79,12 @@ class MatchDetail(BaseModel):
 
 
 class MatchRow(BaseModel):
-    """Row returned by ``GET /matches``."""
+    """Row returned by ``GET /matches``.
+
+    ``home_xg`` / ``away_xg`` piggy-back on the list response so the
+    Matches SPA card can render the past-fixture summary (FT + xG)
+    without issuing a second request per row.
+    """
 
     match_id: str
     league: str
@@ -89,6 +94,54 @@ class MatchRow(BaseModel):
     away_team: str
     home_goals: int | None
     away_goals: int | None
+    home_xg: float | None = None
+    away_xg: float | None = None
+
+
+class TeamMatchStatsRow(BaseModel):
+    """Team-side of ``GET /matches/{match_id}/stats``.
+
+    Mirrors the ``team_match_stats`` lake schema. Every metric is
+    optional because different historical sources fill different
+    columns and upcoming fixtures have no stats at all.
+    """
+
+    team: str
+    is_home: bool
+    goals: int | None = None
+    goals_conceded: int | None = None
+    ht_goals: int | None = None
+    ht_goals_conceded: int | None = None
+    shots: int | None = None
+    shots_on_target: int | None = None
+    shots_off_target: int | None = None
+    shots_in_box: int | None = None
+    corners: int | None = None
+    fouls: int | None = None
+    yellow_cards: int | None = None
+    red_cards: int | None = None
+    offsides: int | None = None
+    possession_pct: float | None = None
+    passes: int | None = None
+    pass_accuracy_pct: float | None = None
+    tackles: int | None = None
+    interceptions: int | None = None
+    aerials_won: int | None = None
+    saves: int | None = None
+    big_chances: int | None = None
+    big_chances_missed: int | None = None
+    xg: float | None = None
+    xga: float | None = None
+    ppda: float | None = None
+    source: str | None = None
+
+
+class MatchStats(BaseModel):
+    """Shape returned by ``GET /matches/{match_id}/stats``."""
+
+    match_id: str
+    home: TeamMatchStatsRow | None
+    away: TeamMatchStatsRow | None
 
 
 class OddsRow(BaseModel):

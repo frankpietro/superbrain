@@ -15,8 +15,10 @@ from superbrain.api.schemas import (
     MatchDetail,
     MatchOddsGroup,
     MatchRow,
+    MatchStats,
     Page,
     SelectionQuote,
+    TeamMatchStatsRow,
 )
 from superbrain.data.connection import Lake
 
@@ -29,24 +31,50 @@ _MAX_LIMIT = 500
 async def list_matches(
     lake: Annotated[Lake, Depends(get_lake)],
     league: Annotated[str | None, Query()] = None,
+    leagues: Annotated[list[str] | None, Query()] = None,
     season: Annotated[str | None, Query()] = None,
     kickoff_from: Annotated[date | None, Query()] = None,
     kickoff_to: Annotated[date | None, Query()] = None,
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = 100,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[MatchRow]:
-    """List matches in the lake, ordered by ``match_date`` descending."""
+    """List matches in the lake, ordered by ``match_date`` descending.
+
+    ``leagues`` (repeated) is honored in addition to the legacy ``league``
+    singular param; ``date_from`` / ``date_to`` are accepted as aliases for
+    ``kickoff_from`` / ``kickoff_to`` so the SPA filter bar stays in one
+    vocabulary. When both forms are sent the newer plural/``date_*`` names
+    win to keep client intent explicit.
+    """
+    effective_leagues = _resolve_leagues(league, leagues)
+    effective_from = date_from if date_from is not None else kickoff_from
+    effective_to = date_to if date_to is not None else kickoff_to
     rows, next_cursor = await anyio.to_thread.run_sync(
         _list_matches_sync,
         lake,
-        league,
+        effective_leagues,
         season,
-        kickoff_from,
-        kickoff_to,
+        effective_from,
+        effective_to,
         limit,
         cursor,
     )
     return Page[MatchRow](items=rows, count=len(rows), next_cursor=next_cursor)
+
+
+def _resolve_leagues(league: str | None, leagues: list[str] | None) -> list[str] | None:
+    """Return the effective league filter list or ``None`` for 'all'.
+
+    Plural ``leagues`` wins over singular ``league`` when both are sent.
+    """
+    if leagues:
+        cleaned = [lg for lg in leagues if lg]
+        return cleaned or None
+    if league:
+        return [league]
+    return None
 
 
 @router.get("/{match_id}", response_model=MatchDetail)
@@ -61,16 +89,39 @@ async def get_match(
     return detail
 
 
+@router.get("/{match_id}/stats", response_model=MatchStats)
+async def get_match_stats(
+    match_id: str,
+    lake: Annotated[Lake, Depends(get_lake)],
+) -> MatchStats:
+    """Return the home + away ``team_match_stats`` rows for one fixture.
+
+    Empty ``home`` / ``away`` (``null``) means the lake has no stats for
+    that side yet — expected for upcoming fixtures and for seasons the
+    historical backfill hasn't processed. 404 is only raised when the
+    fixture itself is unknown.
+    """
+    stats = await anyio.to_thread.run_sync(_match_stats_sync, lake, match_id)
+    if stats is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="match not found")
+    return stats
+
+
 def _list_matches_sync(
     lake: Lake,
-    league: str | None,
+    leagues: list[str] | None,
     season: str | None,
     kickoff_from: date | None,
     kickoff_to: date | None,
     limit: int,
     cursor: str | None,
 ) -> tuple[list[MatchRow], str | None]:
-    frame = lake.read_matches(league=league, season=season)
+    if leagues:
+        frames = [lake.read_matches(league=lg, season=season) for lg in leagues]
+        frames = [f for f in frames if not f.is_empty()]
+        frame = pl.concat(frames) if frames else lake.read_matches().head(0)
+    else:
+        frame = lake.read_matches(season=season)
     if frame.is_empty():
         return [], None
     if kickoff_from is not None:
@@ -86,8 +137,11 @@ def _list_matches_sync(
     if offset + limit < total:
         next_cursor = _encode_cursor(offset + limit)
 
+    xg_lookup = _xg_lookup(lake, window["match_id"].to_list())
+
     rows: list[MatchRow] = []
     for row in window.iter_rows(named=True):
+        home_xg, away_xg = xg_lookup.get(row["match_id"], (None, None))
         rows.append(
             MatchRow(
                 match_id=row["match_id"],
@@ -98,9 +152,88 @@ def _list_matches_sync(
                 away_team=row["away_team"],
                 home_goals=row.get("home_goals"),
                 away_goals=row.get("away_goals"),
+                home_xg=home_xg,
+                away_xg=away_xg,
             )
         )
     return rows, next_cursor
+
+
+def _xg_lookup(lake: Lake, match_ids: list[str]) -> dict[str, tuple[float | None, float | None]]:
+    """Return ``{match_id: (home_xg, away_xg)}`` for the given fixtures.
+
+    Reads the entire ``team_match_stats`` table once and filters down in
+    memory — one round-trip per list request, cheaper than joining on
+    the lake for the typical ≤100-row page. Rows with no matching stats
+    are simply absent from the result dict (caller fills None).
+    """
+    if not match_ids:
+        return {}
+    stats = lake.read_team_match_stats()
+    if stats.is_empty():
+        return {}
+    slice_ = stats.filter(pl.col("match_id").is_in(match_ids)).select(["match_id", "is_home", "xg"])
+    if slice_.is_empty():
+        return {}
+    out: dict[str, tuple[float | None, float | None]] = {}
+    for row in slice_.iter_rows(named=True):
+        mid = row["match_id"]
+        home_xg, away_xg = out.get(mid, (None, None))
+        xg = row.get("xg")
+        if row.get("is_home"):
+            home_xg = xg
+        else:
+            away_xg = xg
+        out[mid] = (home_xg, away_xg)
+    return out
+
+
+def _match_stats_sync(lake: Lake, match_id: str) -> MatchStats | None:
+    matches = lake.read_matches()
+    if matches.is_empty():
+        return None
+    if matches.filter(pl.col("match_id") == match_id).is_empty():
+        return None
+
+    stats = lake.read_team_match_stats(match_id=match_id)
+    home_row: TeamMatchStatsRow | None = None
+    away_row: TeamMatchStatsRow | None = None
+    for row in stats.iter_rows(named=True):
+        team_row = TeamMatchStatsRow(
+            team=row["team"],
+            is_home=bool(row["is_home"]),
+            goals=row.get("goals"),
+            goals_conceded=row.get("goals_conceded"),
+            ht_goals=row.get("ht_goals"),
+            ht_goals_conceded=row.get("ht_goals_conceded"),
+            shots=row.get("shots"),
+            shots_on_target=row.get("shots_on_target"),
+            shots_off_target=row.get("shots_off_target"),
+            shots_in_box=row.get("shots_in_box"),
+            corners=row.get("corners"),
+            fouls=row.get("fouls"),
+            yellow_cards=row.get("yellow_cards"),
+            red_cards=row.get("red_cards"),
+            offsides=row.get("offsides"),
+            possession_pct=row.get("possession_pct"),
+            passes=row.get("passes"),
+            pass_accuracy_pct=row.get("pass_accuracy_pct"),
+            tackles=row.get("tackles"),
+            interceptions=row.get("interceptions"),
+            aerials_won=row.get("aerials_won"),
+            saves=row.get("saves"),
+            big_chances=row.get("big_chances"),
+            big_chances_missed=row.get("big_chances_missed"),
+            xg=row.get("xg"),
+            xga=row.get("xga"),
+            ppda=row.get("ppda"),
+            source=row.get("source"),
+        )
+        if team_row.is_home:
+            home_row = team_row
+        else:
+            away_row = team_row
+    return MatchStats(match_id=match_id, home=home_row, away=away_row)
 
 
 def _match_detail_sync(lake: Lake, match_id: str) -> MatchDetail | None:

@@ -404,6 +404,34 @@ class Lake:
             df = df.filter(pl.col("match_date") >= since)
         return df
 
+    def read_team_match_stats(
+        self,
+        *,
+        league: str | None = None,
+        season: str | None = None,
+        match_id: str | None = None,
+    ) -> pl.DataFrame:
+        """Union-by-name read over the team-match-stats partitions.
+
+        :param league: restrict to one league slug
+        :param season: restrict to one season code
+        :param match_id: keep only rows for one fixture
+        :return: polars dataframe with the requested rows, or empty frame
+        """
+        files = self._resolve_partition_files(
+            self.layout.team_match_stats_root,
+            (
+                ("league", league),
+                ("season", season),
+            ),
+        )
+        if not files:
+            return pl.DataFrame(schema=TEAM_MATCH_STATS_SCHEMA)
+        df = pl.read_parquet(files)
+        if match_id is not None:
+            df = df.filter(pl.col("match_id") == match_id)
+        return df
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
