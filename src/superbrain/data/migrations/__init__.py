@@ -8,6 +8,10 @@ one currently written in ``schema_manifest.json``.
 
 from __future__ import annotations
 
-from superbrain.data.migrations import m001_initial_lake, m002_match_id_index
+from superbrain.data.migrations import (
+    m001_initial_lake,
+    m002_match_id_index,
+    m003_team_elo,
+)
 
-MIGRATIONS = [m001_initial_lake, m002_match_id_index]
+MIGRATIONS = [m001_initial_lake, m002_match_id_index, m003_team_elo]

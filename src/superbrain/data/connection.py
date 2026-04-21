@@ -37,6 +37,7 @@ from superbrain.core.models import (
     Match,
     OddsSnapshot,
     ScrapeRun,
+    TeamElo,
     TeamMatchStats,
 )
 from superbrain.data.migrations import MIGRATIONS
@@ -45,6 +46,7 @@ from superbrain.data.schemas import (
     MATCH_SCHEMA,
     ODDS_SCHEMA,
     SCRAPE_RUNS_SCHEMA,
+    TEAM_ELO_SCHEMA,
     TEAM_MATCH_STATS_SCHEMA,
     align_to_schema,
 )
@@ -268,6 +270,48 @@ class Lake:
                 frame=group,
                 dedupe_cols=("match_id", "team"),
                 schema=TEAM_MATCH_STATS_SCHEMA,
+            )
+            report = IngestReport(
+                rows_received=report.rows_received,
+                rows_written=report.rows_written + written,
+                rows_skipped_duplicate=report.rows_skipped_duplicate + skipped,
+                rejected_reasons=report.rejected_reasons,
+                partitions_written=[*report.partitions_written, str(partition)],
+            )
+        return report
+
+    def ingest_team_elo(
+        self, elos: list[TeamElo], *, provenance: IngestProvenance
+    ) -> IngestReport:
+        """Write a batch of ClubElo snapshots.
+
+        Dedupe key is ``(team, snapshot_date)``; partitioned by the month of
+        the snapshot (``year_month=YYYY-MM``).
+
+        :param elos: already-validated Elo rows
+        :param provenance: who produced these rows
+        :return: report summarizing what landed where
+        """
+        del provenance
+        if not elos:
+            return IngestReport(rows_received=0, rows_written=0)
+
+        rows = [e.model_dump() for e in elos]
+        frame = pl.DataFrame(rows)
+        frame = align_to_schema(frame, TEAM_ELO_SCHEMA)
+        frame = frame.with_columns(
+            pl.col("snapshot_date").cast(pl.Date).dt.strftime("%Y-%m").alias("__ym__")
+        )
+
+        report = IngestReport(rows_received=len(rows), rows_written=0)
+        for (year_month,), group in _group_by(frame, ("__ym__",)):
+            group = group.drop("__ym__")
+            partition = self.layout.team_elo_partition(year_month=str(year_month))
+            written, skipped = self._append_parquet(
+                partition=partition,
+                frame=group,
+                dedupe_cols=("team", "snapshot_date"),
+                schema=TEAM_ELO_SCHEMA,
             )
             report = IngestReport(
                 rows_received=report.rows_received,

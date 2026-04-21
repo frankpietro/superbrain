@@ -131,6 +131,52 @@ rejected, re-run dedupes 100 %. Season code normalized from `"2526"` to
 `"2025-26"`; team names canonicalized on the way in (`Siviglia→Sevilla`
 etc.).
 
+### Historical data pipeline (phase 2, 2026-04-21)
+
+Lives under `src/superbrain/scrapers/historical/`. Backfills matches,
+team-match stats, and team Elo for the top-5 European leagues from
+2020-21 onward. Idempotent by construction — everything flows through
+`Lake.ingest_*`, natural keys dedupe.
+
+**Source stack, by role:**
+
+| Source | Role | Transport | Fields |
+|--------|------|-----------|--------|
+| football-data.co.uk | **Primary backbone** (shots, cards, fouls, HT/FT goals, referee, closing odds) | `httpx` against the static `mmz4281/<YYYY>/<LEAGUE>.csv` URL | schedule, FT/HT goals, 6x 1X2 + AH + OU closings, shots, SoT, corners, fouls, yellows, reds, referee |
+| Understat | **xG/xGA/xPts** (must-have for the engine) | Direct AJAX (`/getLeagueData/<slug>/<year>` with `X-Requested-With: XMLHttpRequest`) | per-match xG, xGA, xPts, shots, shots on target |
+| `soccerdata.FBref` | **Enrichment** (possession, pressures, PPDA proxy, passing%) | `soccerdata` + `undetected-chromedriver` | whatever FBref exposes per stat-type; pivoted per team |
+| `soccerdata.ClubElo` | **Team ratings** (new `team_elo` table) | `soccerdata` | daily Elo + rank per club |
+
+**Merge order** (`merge.py`):
+
+1. Fetch football-data CSV and Understat payload per `(league, season)` — always.
+2. Pivot FBref per stat type if `fbref` is in `--sources`.
+3. Canonicalize team names via `superbrain.core.teams.canonicalize_team` **before** joining.
+4. Outer-join football-data + Understat on `(league, match_date, home_canon, away_canon)`; preserve both sides when one is missing (null fills).
+5. Compute `match_id = sha256(league|date|home|away)[:16]` once per merged row.
+6. Emit two records per row into the stats frame (home & away), attach FBref columns by `(match_id, team)` left-join if present.
+7. ClubElo runs independently — one pass per country, writes into the `team_elo` table, not blocking matches.
+
+**Lake surface:**
+
+- `matches`: hive `league=X/season=Y`; natural key `match_id`.
+- `team_match_stats`: hive `league=X/season=Y`; natural key `(match_id, team)`.
+- `team_elo` (new, migration `m003_team_elo`): hive `country=X`; natural key `(team, snapshot_date, source)`.
+- `scrape_runs`: every backfill call logs one row per `(league, season, source-set)`.
+
+**Orchestrator:** `scripts/backfill_historical.py` — CLI:
+`--lake`, `--leagues`, `--seasons`, `--sources football_data,understat[,fbref,clubelo]`.
+Prints a JSON report with `matches_written / matches_skipped / stats_written / elo_written / rejected`.
+
+**Dependency note:** `soccerdata` is an **optional** extra
+(`uv sync --extra historical`). Core `football_data` + `understat`
+paths are pure-`httpx` and need no Chromedriver.
+
+**Measured baseline (2026-04-21, live, Serie A 2023-24, football-data + understat):**
+
+- 382 matches written, 764 team-match-stats rows, 0 rejections.
+- Wall clock: 1.77s first run; re-run is idempotent (writes 0 rows, skips 382).
+
 ### Stack
 
 | Concern | Choice |
@@ -142,7 +188,7 @@ etc.).
 | Backend framework | FastAPI + uvicorn |
 | Scheduler | APScheduler in-process inside the backend; GitHub Actions cron as fallback |
 | Scraping | `httpx` (async); Playwright lazy-loaded per bookmaker only if forced |
-| Historical sources (TBD after spike) | football-data.co.uk + Understat + (soccerdata if alive) |
+| Historical sources | football-data.co.uk (primary) + Understat AJAX (xG) + `soccerdata.FBref` (enrichment) + `soccerdata.ClubElo` (team ratings) |
 | Bookmakers | Sisal, Goldbet, Eurobet |
 | Testing | `pytest`, `pytest-asyncio`, `respx`, `hypothesis` for property tests |
 | Lint/format | `ruff` |
@@ -366,7 +412,8 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 - 2026-04-21 — **Sisal `shortDescription` encodes the half** (`"1 T"`,
   `"TEMPO 1"`, `"T 1"`, `"1T"`) for per-half markets. Use a regex fold
   rather than exact matches; the SPA is inconsistent.
-- 2026-04-21 — **FBref is dead.** `soccerdata`'s FBref backend broke when the site closed. Any scraper that imports `soccerdata.FBref` must be gated behind a live-check.
+- ~~2026-04-21 — **FBref is dead.** `soccerdata`'s FBref backend broke when the site closed. Any scraper that imports `soccerdata.FBref` must be gated behind a live-check.~~ **Superseded 2026-04-21:** `soccerdata.FBref` works (via `undetected-chromedriver`); kept as an enrichment source behind `--sources fbref`, not the primary. See *Historical data pipeline (phase 2)* below.
+- 2026-04-21 — **Understat doesn't embed `datesData` anymore.** The old `JSON.parse` block on the league HTML page is gone (site redesign). Don't parse the league HTML. Use the internal AJAX endpoint `GET https://understat.com/getLeagueData/<league_slug>/<start_year>` with header `X-Requested-With: XMLHttpRequest`; it returns the full JSON payload (`dates`, `teams`, `players`). Our `understat.py` implements it directly in `httpx`; no `understatapi` dep.
 - 2026-04-21 — **The old repo's DuckDB schema is not portable.** Three separate SQLite files (`historical.db`, `betting_odds.db`, `simulations.db`) with overlapping keys. The migration script normalizes teams and drops one-off schema tables. Do not copy the old schema into the new lake verbatim.
 - 2026-04-21 — **GitHub Actions cron minimum is effectively 5 minutes** and jobs are delayed under high platform load. The "always-on" piece must live on Fly.
 
@@ -389,7 +436,7 @@ hits the real API (Serie A only). CI and default `pytest -q` skip it.
 
 Items that will be decided as phases land:
 
-- Which historical data source wins after the phase-2 spike.
+- ~~Which historical data source wins after the phase-2 spike.~~ Decided 2026-04-21: football-data.co.uk (primary) + Understat (xG) + optional `soccerdata.FBref` + `soccerdata.ClubElo`. See *Historical data pipeline (phase 2)*.
 - Whether to keep the Fly volume as the authoritative lake or move to Cloudflare R2.
 - Exact market taxonomy (which bookmaker markets collapse into a shared `market_code` vs. get their own row).
 - Whether to adopt a supervised layer on top of similarity in a future phase 4c.
