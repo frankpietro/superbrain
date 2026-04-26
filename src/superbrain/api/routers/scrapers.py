@@ -1,13 +1,13 @@
-"""Scrapers router: recent runs and an aggregated health view."""
+"""Scrapers router: recent runs, aggregated health view, and manual trigger."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import anyio
 import polars as pl
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from superbrain.api.deps import get_lake
 from superbrain.api.schemas import (
@@ -19,8 +19,17 @@ from superbrain.api.schemas import (
 )
 from superbrain.data.connection import Lake
 from superbrain.data.schemas import SCRAPE_RUNS_SCHEMA
+from superbrain.scrapers.bookmakers.eurobet.scraper import scrape as scrape_eurobet
+from superbrain.scrapers.bookmakers.goldbet.scraper import scrape as scrape_goldbet
+from superbrain.scrapers.bookmakers.sisal.scraper import scrape as scrape_sisal
 
 router = APIRouter(prefix="/scrapers", tags=["scrapers"])
+
+_SCRAPE_FN = {
+    "sisal": scrape_sisal,
+    "goldbet": scrape_goldbet,
+    "eurobet": scrape_eurobet,
+}
 
 _MAX_LIMIT = 500
 _KNOWN_BOOKMAKERS = ("sisal", "goldbet", "eurobet")
@@ -46,6 +55,30 @@ async def status(lake: Annotated[Lake, Depends(get_lake)]) -> ScrapersStatus:
     """Aggregate latest-run + last-24h counters + short history per bookmaker."""
     blocks = await anyio.to_thread.run_sync(_status_sync, lake)
     return ScrapersStatus(items=blocks)
+
+
+@router.post("/{bookmaker}/run", response_model=ScrapeRunRow, status_code=200)
+async def run_scraper(
+    bookmaker: Literal["sisal", "goldbet", "eurobet"],
+    lake: Annotated[Lake, Depends(get_lake)],
+) -> ScrapeRunRow:
+    """Trigger a one-off scrape for the given bookmaker and return the run record."""
+    scrape_fn = _SCRAPE_FN.get(bookmaker)
+    if scrape_fn is None:
+        raise HTTPException(status_code=404, detail=f"Unknown bookmaker: {bookmaker}")
+    result = await scrape_fn(lake)
+    return ScrapeRunRow(
+        run_id=result.run_id,
+        bookmaker=bookmaker,
+        scraper=f"{bookmaker}.prematch",
+        started_at=result.started_at,
+        finished_at=result.finished_at,
+        status=_normalise_status(result.status),
+        rows_written=result.rows_written,
+        rows_rejected=result.rows_rejected,
+        error_message="; ".join(result.errors)[:1024] if result.errors else None,
+        host=None,
+    )
 
 
 def _list_runs_sync(lake: Lake, bookmaker: str | None, limit: int) -> list[ScrapeRunRow]:

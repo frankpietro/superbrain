@@ -189,11 +189,12 @@ def _compute_value_bets_sync(
 
 
 def _load_upcoming_fixtures(lake: Lake, *, league: str | None) -> list[Match]:
-    """Read every match with ``match_date >= today`` and ``home_goals is null``."""
+    """Read every match with ``match_date == today`` and ``home_goals is null``."""
     today = date.today()
     frame = lake.read_matches(league=league, since=today)
     if frame.is_empty():
         return []
+    frame = frame.filter(pl.col("match_date") == today)
     frame = frame.filter(pl.col("home_goals").is_null() | pl.col("away_goals").is_null())
     fixtures: list[Match] = []
     for row in frame.sort(["match_date", "match_id"]).iter_rows(named=True):
